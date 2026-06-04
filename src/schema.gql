@@ -1,0 +1,57 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+input CreateTemplateInput {
+  content: String!
+  name: String!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+input GenerateTemplateInput {
+  detailLevel: String!
+  focus: String!
+  tone: String!
+  visualStyle: String!
+}
+
+type Mutation {
+  createTemplate(input: CreateTemplateInput!): Template!
+  deleteTemplate(templateId: String!): Boolean!
+  generateTemplate(input: GenerateTemplateInput!): Template!
+  setActiveTemplate(templateId: String!): Boolean!
+  updateNextcloudFilePath(input: UpdateNextcloudFilePathInput!): Boolean!
+  updateTemplate(input: UpdateTemplateInput!): Template!
+}
+
+type Query {
+  myTemplateSettings: TemplateSettings!
+  myTemplates: [Template!]!
+}
+
+type Template {
+  content: String!
+  created_at: DateTime!
+  id: ID!
+  name: String!
+  user_id: String!
+}
+
+type TemplateSettings {
+  active_template_id: String
+  nextcloud_file_path: String
+}
+
+input UpdateNextcloudFilePathInput {
+  nextcloudFilePath: String!
+}
+
+input UpdateTemplateInput {
+  content: String!
+  name: String!
+  templateId: String!
+}

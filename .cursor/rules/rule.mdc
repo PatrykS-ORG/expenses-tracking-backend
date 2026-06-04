@@ -8,10 +8,11 @@ alwaysApply: true
 - **Always** use `pnpm` — never npm or yarn.
 
 ## NestJS structure
-- One **feature module** per domain under `src/<feature>/` with `*.module.ts`, `*.controller.ts`, `*.service.ts`, and DTOs in `dto/`.
+- One **feature module** per domain under `src/<feature>/` with `*.module.ts`, `*.service.ts`, and DTOs/inputs in `dto/`.
+- GraphQL features use `*.resolver.ts` and object types in `models/`; REST features use `*.controller.ts`.
 - Register new modules in `AppModule` imports.
-- File names: **kebab-case** (`jwt-auth.guard.ts`, `create-template.dto.ts`).
-- Class names: **PascalCase** (`TemplatesService`, `CreateTemplateDto`).
+- File names: **kebab-case** (`gql-auth.guard.ts`, `create-template.input.ts`).
+- Class names: **PascalCase** (`TemplatesService`, `CreateTemplateInput`).
 
 ## Database (Prisma)
 - All database access goes through an injectable **`PrismaService`** — never `new PrismaClient()` in controllers or services.
@@ -19,13 +20,14 @@ alwaysApply: true
 - `User.id` must stay aligned with Supabase Auth UID (`sub`).
 
 ## Authentication
-- Protected routes: `@UseGuards(JwtAuthGuard)` and `@CurrentUser()` for the authenticated user.
-- JWT is issued by Supabase on the frontend; backend validates with `SUPABASE_JWT_SECRET`.
+- **REST**: `@UseGuards(JwtAuthGuard)` and `@CurrentUser()`.
+- **GraphQL**: `@UseGuards(GqlAuthGuard)` and `@CurrentUserGql()`; `GraphQLModule` must pass `context: ({ req }) => ({ req })`.
+- JWT is issued by Supabase on the frontend; backend verifies via **`SUPABASE_URL` JWKS (ES256)** or legacy **`SUPABASE_JWT_SECRET` (HS256)**.
 - Do not implement custom login endpoints — auth is delegated to Supabase.
 
 ## DTOs & validation
-- Use request DTOs with `class-validator` decorators when adding validated endpoints.
-- Use separate response shapes where needed; avoid returning raw Prisma entities with sensitive fields.
+- Use request DTOs with `class-validator` decorators when adding validated REST endpoints.
+- GraphQL uses `@InputType()` / `@ObjectType()` classes; avoid returning raw Prisma entities with sensitive fields.
 
 ## Configuration
 - Read env vars via **`ConfigService`** (`@nestjs/config`), not `process.env` in services.

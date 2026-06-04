@@ -2,6 +2,8 @@
 
 ## File and folder layout
 
+### REST feature module
+
 ```
 src/
 └── <feature>/
@@ -15,10 +17,29 @@ src/
     └── guards/ or decorators/   # only when feature-specific
 ```
 
-- **kebab-case** file names: `jwt-auth.guard.ts`, `current-user.decorator.ts`
-- **PascalCase** classes: `TemplatesService`, `JwtAuthGuard`
+### GraphQL feature module (Code First)
+
+Example: `src/templates/`
+
+```
+src/
+└── <feature>/
+    ├── <feature>.module.ts
+    ├── <feature>.resolver.ts
+    ├── <feature>.service.ts
+    ├── dto/
+    │   ├── create-<feature>.input.ts
+    │   └── update-<feature>.input.ts
+    ├── models/
+    │   └── <entity>.model.ts
+    └── <feature>.service.spec.ts
+```
+
+- **kebab-case** file names: `gql-auth.guard.ts`, `create-template.input.ts`
+- **PascalCase** classes: `TemplatesService`, `TemplatesResolver`, `GqlAuthGuard`
 - One primary class per file
-- Shared auth pieces live in `src/auth/`; shared Prisma wiring in `src/prisma/` (when added)
+- Shared auth in `src/auth/`; shared Prisma in `src/prisma/`
+- Generated schema: `src/schema.gql` (do not edit by hand)
 
 ## Import order
 
@@ -33,10 +54,13 @@ Use explicit imports; no path aliases are configured in `tsconfig.json`.
 | Artifact | Convention | Example |
 |----------|------------|---------|
 | Module | `<Feature>Module` | `TemplatesModule` |
-| Controller | `<Feature>Controller` | `TemplatesController` |
+| Controller | `<Feature>Controller` | `AppController` |
+| Resolver | `<Feature>Resolver` | `TemplatesResolver` |
 | Service | `<Feature>Service` | `TemplatesService` |
-| DTO | `<Action><Feature>Dto` | `CreateTemplateDto` |
-| Guard | `<Name>Guard` | `JwtAuthGuard` |
+| REST DTO | `<Action><Feature>Dto` | `CreateTemplateDto` |
+| GraphQL input | `<Action><Feature>Input` | `CreateTemplateInput` |
+| GraphQL object | `<Entity>` (model class) | `Template` |
+| Guard | `<Name>Guard` | `JwtAuthGuard`, `GqlAuthGuard` |
 | Spec file | same base + `.spec.ts` | `templates.service.spec.ts` |
 
 ## DTOs and validation
@@ -44,17 +68,21 @@ Use explicit imports; no path aliases are configured in `tsconfig.json`.
 When adding validated endpoints:
 
 1. Install/use `class-validator` and `class-transformer`.
-2. Define request DTOs in `dto/` with validation decorators.
-3. Enable `ValidationPipe` globally or on the controller (to be added with first DTO endpoints).
-4. Prefer explicit response types or DTOs instead of returning full Prisma models.
+2. Define request types in `dto/` with validation decorators (REST DTOs or GraphQL `@InputType()` classes).
+3. Enable `ValidationPipe` globally or on the controller when REST validation is introduced.
+4. Prefer explicit GraphQL object types (`@ObjectType()`) instead of returning raw Prisma entities with sensitive fields.
 
-Example shape (illustrative):
+Example (GraphQL input — current pattern):
 
 ```typescript
-// dto/create-template.dto.ts
-export class CreateTemplateDto {
+// dto/create-template.input.ts
+@InputType()
+export class CreateTemplateInput {
+  @Field()
   name: string;
-  content: string; // HTML with placeholder variables
+
+  @Field()
+  content: string;
 }
 ```
 
@@ -62,31 +90,44 @@ export class CreateTemplateDto {
 
 - Access via **`ConfigService`** in constructors: `constructor(private config: ConfigService) {}`
 - Register new keys in `.env.example` with a short comment
-- `JwtStrategy` already uses `ConfigService` for `SUPABASE_JWT_SECRET`
+- `JwtStrategy` uses `ConfigService` for `SUPABASE_URL` (JWKS / ES256) or `SUPABASE_JWT_SECRET` (legacy HS256)
 
-Avoid `process.env` in services except in bootstrap edge cases.
+Avoid `process.env` in services except in bootstrap edge cases (`main.ts` may use `PORT`).
 
 ## Error handling
 
 - **Services** throw domain-appropriate `HttpException` subclasses.
-- **Controllers** stay thin — delegate to services.
-- For batch/cron work: catch per-user errors, log, continue ([PLAN.md](../PLAN.md)).
+- **Controllers / resolvers** stay thin — delegate to services.
+- For batch/cron work: catch per-user errors, log, continue processing remaining users.
 
 ## Authentication in handlers
 
+### REST
+
 ```typescript
-@Get('me')
+@Get('profile')
 @UseGuards(JwtAuthGuard)
-getMe(@CurrentUser() user: { id: string; email: string; roles: string }) {
-  return this.usersService.findById(user.id);
+getProfile(@CurrentUser() user: { id: string; email?: string; roles?: string }) {
+  return { user };
 }
 ```
 
-Type `@CurrentUser()` properly when introducing shared interfaces (e.g. `AuthUser`).
+### GraphQL
 
-## Prisma usage (when `PrismaService` exists)
+```typescript
+@UseGuards(GqlAuthGuard)
+@Query(() => [Template])
+async myTemplates(@CurrentUserGql() user: AuthenticatedUser) {
+  const userId = user.sub ?? user.id;
+  return this.templatesService.findAllByUser(userId);
+}
+```
 
-- Inject `PrismaService` into services only — not controllers.
+Type shared user payloads when introducing an `AuthUser` interface.
+
+## Prisma usage
+
+- Inject `PrismaService` into services only — not controllers or resolvers.
 - Use transactions for multi-step writes (e.g. set active template + validate ownership).
 - Run migrations after every schema change; commit migration SQL under `prisma/migrations/`.
 
@@ -97,20 +138,21 @@ Type `@CurrentUser()` properly when introducing shared interfaces (e.g. `AuthUse
 | Unit | Next to source | `*.spec.ts` |
 | E2E | `test/` | `*.e2e-spec.ts` |
 
-- Mock `PrismaService` in unit tests.
+- Mock `PrismaService` and JWT guards in unit tests.
 - E2E: use `Test.createTestingModule({ imports: [AppModule] })` + Supertest.
 - Add auth tests with a valid test JWT or mocked guard when expanding coverage.
 
 ## How to add a new feature module
 
-1. Create folder `src/<feature>/` with module, controller, service.
-2. Add DTOs under `dto/` if the feature exposes HTTP input.
-3. Import `<Feature>Module` in `AppModule`.
-4. Inject `PrismaService` in the service if persistence is needed.
-5. Protect routes with `JwtAuthGuard` unless explicitly public (e.g. cron with `CRON_SECRET`).
-6. Add unit tests for service logic; E2E for critical HTTP paths.
-7. Update [architecture.md](./architecture.md) and [database.md](./database.md) if schema or system boundaries change.
-8. Document new env vars in `.env.example`.
+1. Create folder `src/<feature>/` with module and service.
+2. Expose API via **GraphQL resolver** (preferred for product features) and/or **REST controller**.
+3. Add `dto/` inputs (GraphQL) or DTOs (REST) as needed; add `models/` for GraphQL object types.
+4. Import `<Feature>Module` in `AppModule`.
+5. Inject `PrismaService` in the service if persistence is needed.
+6. Protect endpoints: `GqlAuthGuard` + `@CurrentUserGql()` for GraphQL; `JwtAuthGuard` + `@CurrentUser()` for REST; cron uses `CRON_SECRET` (planned).
+7. Add unit tests for service logic; E2E for critical paths.
+8. Update [architecture.md](./architecture.md) and [database.md](./database.md) if schema or system boundaries change.
+9. Document new env vars in `.env.example`.
 
 ## Code style
 

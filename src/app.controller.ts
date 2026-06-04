@@ -3,6 +3,12 @@ import { AppService } from './app.service';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { CurrentUser } from './auth/current-user.decorator';
 
+interface AuthenticatedUser {
+  id: string;
+  email?: string;
+  roles?: string;
+}
+
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
@@ -15,10 +21,10 @@ export class AppController {
   // Próbny chroniony endpoint do testów autentykacji
   @Get('profile')
   @UseGuards(JwtAuthGuard)
-  getProfile(@CurrentUser() user: any) {
+  getProfile(@CurrentUser() user: AuthenticatedUser) {
     return {
       message: 'Udało Ci się pomyślnie zautoryzować!',
-      user: user,
+      user,
     };
   }
 }

@@ -1,9 +1,19 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
+import { EmailService } from '../email/email.service';
 import { GenerateTemplateInput } from './dto/generate-template.input';
 import { CreateTemplateInput } from './dto/create-template.input';
 import { UpdateTemplateInput } from './dto/update-template.input';
+import {
+  applyTemplateValues,
+  getExampleTemplateValues,
+} from './template-renderer';
 
 type TemplateEntity = Awaited<ReturnType<PrismaService['template']['create']>>;
 type UserEntity = Awaited<ReturnType<PrismaService['user']['upsert']>>;
@@ -19,6 +29,7 @@ export class TemplatesService {
   constructor(
     private prisma: PrismaService,
     private aiService: AiService,
+    private emailService: EmailService,
   ) {}
 
   async findAllByUser(userId: string): Promise<TemplateEntity[]> {
@@ -139,7 +150,10 @@ export class TemplatesService {
     return true;
   }
 
-  async setActiveTemplate(userId: string, templateId: string): Promise<boolean> {
+  async setActiveTemplate(
+    userId: string,
+    templateId: string,
+  ): Promise<boolean> {
     await this.ensureTemplateOwnership(userId, templateId);
 
     await this.prisma.user.update({
@@ -161,6 +175,62 @@ export class TemplatesService {
     await this.prisma.user.update({
       where: { id: userId },
       data: { nextcloud_file_path: path.length > 0 ? path : null },
+    });
+
+    return true;
+  }
+
+  async sendTestEmail(
+    userId: string,
+    userEmail: string | undefined,
+    recipientEmail: string,
+  ): Promise<boolean> {
+    const normalizedRecipient = recipientEmail.trim().toLowerCase();
+    if (!normalizedRecipient) {
+      throw new BadRequestException('Recipient email cannot be empty');
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedRecipient)) {
+      throw new BadRequestException('Recipient email is invalid');
+    }
+
+    await this.ensureUserExists(userId, userEmail);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        email: true,
+        active_template_id: true,
+      },
+    });
+
+    if (!user?.active_template_id) {
+      throw new BadRequestException(
+        'Set an active template before sending a test email',
+      );
+    }
+
+    const template = await this.prisma.template.findUnique({
+      where: { id: user.active_template_id },
+    });
+
+    if (!template || template.user_id !== userId) {
+      throw new NotFoundException('Active template not found');
+    }
+
+    const renderedHtml = applyTemplateValues(
+      template.content,
+      getExampleTemplateValues(user.email),
+    );
+
+    const currentMonth = new Intl.DateTimeFormat('pl-PL', {
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date());
+
+    await this.emailService.sendHtmlEmail({
+      to: normalizedRecipient,
+      subject: `Test podsumowania wydatkow - ${currentMonth}`,
+      html: renderedHtml,
     });
 
     return true;

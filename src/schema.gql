@@ -23,6 +23,7 @@ type Mutation {
   createTemplate(input: CreateTemplateInput!): Template!
   deleteTemplate(templateId: String!): Boolean!
   generateTemplate(input: GenerateTemplateInput!): Template!
+  sendTestEmail(input: SendTestEmailInput!): Boolean!
   setActiveTemplate(templateId: String!): Boolean!
   updateNextcloudFilePath(input: UpdateNextcloudFilePathInput!): Boolean!
   updateTemplate(input: UpdateTemplateInput!): Template!
@@ -31,6 +32,10 @@ type Mutation {
 type Query {
   myTemplateSettings: TemplateSettings!
   myTemplates: [Template!]!
+}
+
+input SendTestEmailInput {
+  recipientEmail: String!
 }
 
 type Template {

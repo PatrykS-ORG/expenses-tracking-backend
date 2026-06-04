@@ -9,6 +9,7 @@ import { TemplateSettings } from './models/template-settings.model';
 import { CreateTemplateInput } from './dto/create-template.input';
 import { UpdateTemplateInput } from './dto/update-template.input';
 import { UpdateNextcloudFilePathInput } from './dto/update-nextcloud-file-path.input';
+import { SendTestEmailInput } from './dto/send-test-email.input';
 
 interface AuthenticatedUser {
   sub?: string;
@@ -75,7 +76,10 @@ export class TemplatesResolver {
     @CurrentUserGql() user: AuthenticatedUser,
     @Args('input') input: UpdateTemplateInput,
   ) {
-    return this.templatesService.updateTemplate(this.extractUserId(user), input);
+    return this.templatesService.updateTemplate(
+      this.extractUserId(user),
+      input,
+    );
   }
 
   @UseGuards(GqlAuthGuard)
@@ -84,7 +88,10 @@ export class TemplatesResolver {
     @CurrentUserGql() user: AuthenticatedUser,
     @Args('templateId') templateId: string,
   ) {
-    return this.templatesService.deleteTemplate(this.extractUserId(user), templateId);
+    return this.templatesService.deleteTemplate(
+      this.extractUserId(user),
+      templateId,
+    );
   }
 
   @UseGuards(GqlAuthGuard)
@@ -109,6 +116,19 @@ export class TemplatesResolver {
       this.extractUserId(user),
       user.email,
       input.nextcloudFilePath,
+    );
+  }
+
+  @UseGuards(GqlAuthGuard)
+  @Mutation(() => Boolean)
+  async sendTestEmail(
+    @CurrentUserGql() user: AuthenticatedUser,
+    @Args('input') input: SendTestEmailInput,
+  ) {
+    return this.templatesService.sendTestEmail(
+      this.extractUserId(user),
+      user.email,
+      input.recipientEmail,
     );
   }
 }

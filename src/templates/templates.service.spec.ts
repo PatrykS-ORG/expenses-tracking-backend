@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TemplatesService } from './templates.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
+import { EmailService } from '../email/email.service';
 import { GenerateTemplateInput } from './dto/generate-template.input';
 
 describe('TemplatesService', () => {
@@ -11,15 +12,20 @@ describe('TemplatesService', () => {
     template: {
       findMany: jest.fn(),
       create: jest.fn(),
+      findUnique: jest.fn(),
     },
     user: {
       upsert: jest.fn(),
       update: jest.fn(),
+      findUnique: jest.fn(),
     },
   };
 
   const aiServiceMock = {
     generateTemplate: jest.fn(),
+  };
+  const emailServiceMock = {
+    sendHtmlEmail: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -30,6 +36,7 @@ describe('TemplatesService', () => {
         TemplatesService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: AiService, useValue: aiServiceMock },
+        { provide: EmailService, useValue: emailServiceMock },
       ],
     }).compile();
 
@@ -111,5 +118,40 @@ describe('TemplatesService', () => {
       data: { active_template_id: createdTemplate.id },
     });
     expect(result).toEqual(createdTemplate);
+  });
+
+  it('sends test email based on active template', async () => {
+    const userId = 'user-7';
+    const activeTemplateId = 'template-7';
+
+    prismaMock.user.upsert.mockResolvedValue({
+      id: userId,
+      email: 'tester@example.com',
+    });
+    prismaMock.user.findUnique.mockResolvedValue({
+      email: 'tester@example.com',
+      active_template_id: activeTemplateId,
+    });
+    prismaMock.template.findUnique.mockResolvedValue({
+      id: activeTemplateId,
+      user_id: userId,
+      name: 'Test template',
+      content: '<h1>{{ currentMonth }}</h1><p>{{ savingsMessage }}</p>',
+      created_at: new Date(),
+    });
+    emailServiceMock.sendHtmlEmail.mockResolvedValue(undefined);
+
+    const result = await service.sendTestEmail(
+      userId,
+      'tester@example.com',
+      'Receiver@example.com',
+    );
+
+    expect(emailServiceMock.sendHtmlEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'receiver@example.com',
+      }),
+    );
+    expect(result).toBe(true);
   });
 });

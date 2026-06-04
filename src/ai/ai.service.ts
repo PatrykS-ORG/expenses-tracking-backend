@@ -11,7 +11,7 @@ Create a personalized monthly expense summary email template in clean, responsiv
 Do not wrap your response in markdown blocks like \`\`\`html, just output the raw HTML.
 The HTML should contain placeholders for dynamic data injected later.
 Use these placeholders exactly as written:
-{{ userName }}, {{ currentMonth }}, {{ totalExpenses }}, {{ savingsAmount }}, {{ savingsMessage }}, {{ expensesList }}
+{{ userName }}, {{ currentMonth }}, {{ salaryAmount }}, {{ totalExpenses }}, {{ savingsAmount }}, {{ savingsMessage }}, {{ expensesList }}
 
 Ensure the design is responsive and looks good on mobile devices.
 The output MUST be only raw HTML code starting with <!DOCTYPE html>.`;

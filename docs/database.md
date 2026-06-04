@@ -1,6 +1,6 @@
 # Database documentation
 
-PostgreSQL hosted on **Supabase**, accessed via **Prisma 7**. Schema lives in [prisma/schema.prisma](../prisma/schema.prisma); connection URLs come from `.env` (`DATABASE_URL`, `DIRECT_URL`) via [prisma.config.ts](../prisma.config.ts).
+PostgreSQL hosted on **Supabase**, accessed via **Prisma** (`@prisma/client` v6, migrations config via `@prisma/config` / [prisma.config.ts](../prisma.config.ts)). Schema lives in [prisma/schema.prisma](../prisma/schema.prisma); connection URLs come from `.env` (`DATABASE_URL`, `DIRECT_URL`).
 
 ## Models (current)
 
@@ -68,7 +68,7 @@ erDiagram
 
 ## Planned: SummaryLog
 
-From [PLAN.md](../PLAN.md) — optional table for monthly processing history (success/failure per user, timestamps). Not in schema yet.
+Optional future table for monthly processing history (success/failure per user, timestamps). Not in schema yet.
 
 ## Migrations
 
@@ -93,7 +93,7 @@ Lock file: `prisma/migrations/migration_lock.toml` (provider: `postgresql`).
 
 ### Auth UID sync
 
-When a user first signs up via Supabase Auth, create a `User` row with `id = jwt.sub` and `email` from the token. Do not generate a separate UUID unrelated to Auth.
+When a user first signs up via Supabase Auth, their profile row must use `id = jwt.sub` and `email` from the token. Do not generate a separate UUID unrelated to Auth. Until a dedicated `UsersModule` exists, `TemplatesService` upserts the `User` row from the JWT when needed (e.g. `generateAndSaveTemplate`, `updateNextcloudFilePath`) — required for the `Template.user_id` foreign key.
 
 ### Row Level Security (RLS)
 
@@ -101,14 +101,14 @@ Migrations in this repo do not enable RLS. The NestJS API is the primary access 
 
 ### JWT vs database user
 
-Authentication proves identity via JWT; authorization and profile data live in `User` / `Template`. Handlers should resolve the DB user by `CurrentUser().id`.
+Authentication proves identity via JWT; authorization and profile data live in `User` / `Template`. Handlers should resolve the DB user by `CurrentUser().id` or `CurrentUserGql()` (`sub` / `id`).
 
-## Prisma in the application (TODO)
+## Prisma in the application
 
-`PrismaService` is not wired in NestJS yet. Target pattern:
+`PrismaModule` registers a global-style injectable `PrismaService` that extends `PrismaClient` and calls `$connect()` in `onModuleInit`. Only **services** inject it (e.g. `TemplatesService`); resolvers and controllers stay thin.
 
 ```typescript
-// src/prisma/prisma.service.ts — illustrative
+// src/prisma/prisma.service.ts
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
   async onModuleInit() {
@@ -117,7 +117,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 }
 ```
 
-Register as a global or imported module and inject only into services.
+Imported in `AppModule` alongside feature modules that depend on persistence.
 
 ## Useful commands
 

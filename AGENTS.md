@@ -1,8 +1,8 @@
 # AGENTS.md — expenses-tracking-backend
 
-NestJS 11 API for **ExpenseAI**: automated, personalized monthly expense summaries from Nextcloud files. The backend verifies Supabase JWTs, will persist data via Prisma against Supabase PostgreSQL, and will eventually integrate DeepSeek AI, Brevo SMTP, Nextcloud WebDAV, and a cron webhook.
+NestJS 11 API for **ExpenseAI**: automated, personalized monthly expense summaries from Nextcloud files. The backend verifies Supabase JWTs (JWKS or legacy secret), persists data via **Prisma** against Supabase PostgreSQL, exposes a **GraphQL** API for templates and settings, and calls **DeepSeek** for onboarding template generation. Brevo SMTP, Nextcloud WebDAV, and the cron webhook are not implemented yet.
 
-**Status:** Early foundation — auth wiring and Prisma schema exist; feature modules and `PrismaService` are not implemented yet. See [PLAN.md](./PLAN.md) for the full product roadmap.
+**Status:** Foundation plus templates — `PrismaModule`, `TemplatesModule`, `AiModule`, and GraphQL are wired. REST smoke endpoints remain for health and auth checks.
 
 ## Prerequisites
 
@@ -30,37 +30,41 @@ NestJS 11 API for **ExpenseAI**: automated, personalized monthly expense summari
 
 ```
 src/
-├── auth/              # JWT strategy, guard, @CurrentUser() decorator
-├── app.module.ts      # Root module (ConfigModule, AuthModule)
-├── app.controller.ts  # Root HTTP controller
+├── auth/                    # JwtStrategy, JwtAuthGuard, GqlAuthGuard, @CurrentUser*()
+├── prisma/                  # PrismaModule, PrismaService
+├── templates/               # GraphQL resolver, service, inputs, models
+├── ai/                      # AiService (DeepSeek)
+├── schema.gql               # Auto-generated GraphQL schema (do not edit)
+├── app.module.ts            # Root module
+├── app.controller.ts        # GET /, GET /profile
 ├── app.service.ts
-└── main.ts            # Bootstrap (default PORT 3000)
+└── main.ts                  # Bootstrap, CORS, PORT
 
 prisma/
-├── schema.prisma      # User, Template models
-└── migrations/        # Applied SQL migrations
+├── schema.prisma            # User, Template models
+└── migrations/              # Applied SQL migrations
 
-docs/                  # Architecture, conventions, database, tech-stack
-test/                  # E2E tests (*.e2e-spec.ts)
+docs/                        # architecture, conventions, database, tech-stack
+test/                        # E2E tests (*.e2e-spec.ts)
 ```
 
-Planned feature folders under `src/`: `prisma/`, `users/`, `templates/`, `email/`, `webdav/`, `cron/`, `ai/`.
+Planned under `src/`: `users/`, `email/`, `webdav/`, `cron/`.
 
 ## Key architectural decisions
 
-- **Modular monolith** — one NestJS module per domain (controller + service + DTOs).
-- **Supabase Auth** — frontend obtains JWT; backend validates with `SUPABASE_JWT_SECRET` via Passport JWT (`JwtAuthGuard`, `@CurrentUser()`).
-- **Prisma 7** — schema and migrations live in `prisma/`; datasource URL from `DATABASE_URL` / `DIRECT_URL` via `prisma.config.ts`. All DB access must go through an injectable `PrismaService` (to be added).
-- **REST today** — `GET /`, `GET /profile` (protected). GraphQL is described in [PLAN.md](./PLAN.md) but not implemented.
-- **Config** — `ConfigModule` is global; use `ConfigService` in services/strategies, not raw `process.env` in business logic.
+- **Modular monolith** — one NestJS module per domain (service + GraphQL resolver and/or REST controller + DTOs/inputs).
+- **Supabase Auth** — frontend obtains JWT; backend validates via JWKS (`SUPABASE_URL`, ES256) or legacy `SUPABASE_JWT_SECRET` (HS256). GraphQL uses `GqlAuthGuard` and `@CurrentUserGql()`; REST uses `JwtAuthGuard` and `@CurrentUser()`.
+- **GraphQL (Code First)** — primary API for templates; playground at `/graphql` in dev; schema written to `src/schema.gql`.
+- **Prisma** — schema and migrations in `prisma/`; URLs from `DATABASE_URL` / `DIRECT_URL` via `prisma.config.ts`. All DB access through injectable `PrismaService`.
+- **REST** — `GET /`, `GET /profile` for hello and auth smoke tests only.
+- **Config** — `ConfigModule` is global; use `ConfigService` in services/strategies, not raw `process.env` in business logic (except bootstrap `PORT`).
 
 ## Related documentation
 
 | File | Contents |
 |------|----------|
-| [PLAN.md](./PLAN.md) | Product requirements, features, todos (Polish) |
 | [docs/tech-stack.md](./docs/tech-stack.md) | Libraries and versions |
-| [docs/architecture.md](./docs/architecture.md) | System design, auth flow, module graph |
+| [docs/architecture.md](./docs/architecture.md) | System design, auth flow, module graph, API |
 | [docs/conventions.md](./docs/conventions.md) | Coding patterns and how to add features |
 | [docs/database.md](./docs/database.md) | Schema, relationships, migrations |
 | [.env.example](./.env.example) | Required environment variables |
@@ -73,10 +77,14 @@ Repo: `expenses-tracking-frontend` (sibling project). The React app uses Supabas
 Authorization: Bearer <supabase_access_token>
 ```
 
+GraphQL requests use the same header. CORS is enabled on the Nest app for local development.
+
 ## Common pitfalls
 
-- Do **not** instantiate `PrismaClient` directly in controllers or services — use `PrismaService` once it exists.
+- Do **not** instantiate `PrismaClient` directly in controllers or services — use `PrismaService`.
 - Do **not** use npm/yarn — only `pnpm`.
-- `User.id` in Prisma must match Supabase Auth `sub` (UUID) when creating profiles.
-- `class-validator` / `class-transformer` are planned for DTOs but not yet in `package.json` — add them when introducing validated DTOs.
+- `User.id` in Prisma must match Supabase Auth `sub` (UUID) when creating or upserting profiles.
+- Set **`SUPABASE_URL`** for JWT verification on current Supabase projects; `SUPABASE_JWT_SECRET` alone is for legacy HS256.
+- `class-validator` / `class-transformer` are not in `package.json` yet — add them when introducing validated REST DTOs.
+- Do **not** hand-edit `src/schema.gql`; it is generated by NestJS GraphQL.
 - The default [README.md](./README.md) is still the NestJS starter; prefer this file and `docs/` for project context.

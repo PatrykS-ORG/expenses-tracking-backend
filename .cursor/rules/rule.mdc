@@ -1,3 +1,45 @@
 ---
 alwaysApply: true
 ---
+# Backend rules — expenses-tracking-backend
+
+## Environment & package management
+- **Node.js**: Use version `24.16.0` (see `.nvmrc`).
+- **Always** use `pnpm` — never npm or yarn.
+
+## NestJS structure
+- One **feature module** per domain under `src/<feature>/` with `*.module.ts`, `*.controller.ts`, `*.service.ts`, and DTOs in `dto/`.
+- Register new modules in `AppModule` imports.
+- File names: **kebab-case** (`jwt-auth.guard.ts`, `create-template.dto.ts`).
+- Class names: **PascalCase** (`TemplatesService`, `CreateTemplateDto`).
+
+## Database (Prisma)
+- All database access goes through an injectable **`PrismaService`** — never `new PrismaClient()` in controllers or services.
+- After schema changes: `pnpm prisma migrate dev` then `pnpm prisma generate`.
+- `User.id` must stay aligned with Supabase Auth UID (`sub`).
+
+## Authentication
+- Protected routes: `@UseGuards(JwtAuthGuard)` and `@CurrentUser()` for the authenticated user.
+- JWT is issued by Supabase on the frontend; backend validates with `SUPABASE_JWT_SECRET`.
+- Do not implement custom login endpoints — auth is delegated to Supabase.
+
+## DTOs & validation
+- Use request DTOs with `class-validator` decorators when adding validated endpoints.
+- Use separate response shapes where needed; avoid returning raw Prisma entities with sensitive fields.
+
+## Configuration
+- Read env vars via **`ConfigService`** (`@nestjs/config`), not `process.env` in services.
+- Document new variables in `.env.example`.
+
+## Code style
+- **Prettier**: single quotes, trailing commas.
+- **Comments**: English for code; Polish is acceptable for user-facing API messages matching the product.
+- **Tests**: unit tests co-located as `*.spec.ts`; E2E in `test/*.e2e-spec.ts`.
+
+## Testing
+- Run `pnpm run test` before finishing backend changes.
+- Mock `PrismaService` and JWT guards in unit tests; use Supertest for E2E.
+
+## Documentation
+- Update `docs/architecture.md` or `docs/database.md` when adding modules or schema changes.
+- See `AGENTS.md` for commands and project overview.

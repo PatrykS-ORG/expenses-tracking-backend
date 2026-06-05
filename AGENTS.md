@@ -15,7 +15,7 @@ NestJS 11 API for **ExpenseAI**: automated, personalized monthly expense summari
 
 | Command | Purpose |
 |---------|---------|
-| `pnpm install` | Install dependencies |
+| `pnpm install` | Install dependencies (runs `prisma generate` via postinstall) |
 | `pnpm run start:dev` | Dev server with watch (default port `3000`) |
 | `pnpm run build` | Compile to `dist/` |
 | `pnpm run start:prod` | Run compiled app |

@@ -8,26 +8,32 @@ datasource db {
   provider = "postgresql"
 }
 
+enum DataSourceType {
+  FILE_UPLOAD
+  NEXTCLOUD
+}
+
 model User {
-  id                  String     @id @default(uuid()) // Powinno być synchronizowane z Supabase Auth UID
-  email               String     @unique
-  nextcloud_file_path String?
-  active_template_id  String?
-  created_at          DateTime   @default(now())
-  templates           Template[]
-  
+  id                 String         @id @default(uuid()) // Powinno być synchronizowane z Supabase Auth UID
+  email              String         @unique
+  data_source_type   DataSourceType @default(FILE_UPLOAD)
+  data_source_config Json?
+  active_template_id String?
+  created_at         DateTime       @default(now())
+  templates          Template[]
+
   // Relacja do aktywnego szablonu
   activeTemplate Template? @relation("ActiveTemplate", fields: [active_template_id], references: [id])
 }
 
 model Template {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   user_id    String
   name       String
-  content    String   // Czysty HTML z tagami do podmiany zmiennych
-  created_at DateTime @default(now())
+  content    String    // Czysty HTML z tagami do podmiany zmiennych
+  created_at DateTime  @default(now())
 
   // Relacja zwrotna do użytkownika
-  user         User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user           User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
   activeForUsers User[] @relation("ActiveTemplate")
 }

@@ -7,6 +7,11 @@ input CreateTemplateInput {
   name: String!
 }
 
+enum DataSourceType {
+  FILE_UPLOAD
+  NEXTCLOUD
+}
+
 """
 A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
 """
@@ -23,14 +28,19 @@ type Mutation {
   createTemplate(input: CreateTemplateInput!): Template!
   deleteTemplate(templateId: String!): Boolean!
   generateTemplate(input: GenerateTemplateInput!): Template!
+  sendTestEmail(input: SendTestEmailInput!): Boolean!
   setActiveTemplate(templateId: String!): Boolean!
-  updateNextcloudFilePath(input: UpdateNextcloudFilePathInput!): Boolean!
+  updateDataSource(input: UpdateDataSourceInput!): Boolean!
   updateTemplate(input: UpdateTemplateInput!): Template!
 }
 
 type Query {
   myTemplateSettings: TemplateSettings!
   myTemplates: [Template!]!
+}
+
+input SendTestEmailInput {
+  recipientEmail: String!
 }
 
 type Template {
@@ -43,11 +53,14 @@ type Template {
 
 type TemplateSettings {
   active_template_id: String
+  data_source_type: DataSourceType!
   nextcloud_file_path: String
+  uploaded_file_path: String
 }
 
-input UpdateNextcloudFilePathInput {
-  nextcloudFilePath: String!
+input UpdateDataSourceInput {
+  dataSourceType: DataSourceType!
+  nextcloudFilePath: String
 }
 
 input UpdateTemplateInput {

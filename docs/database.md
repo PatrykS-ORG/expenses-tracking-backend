@@ -1,42 +1,75 @@
 # Database documentation
 
-PostgreSQL hosted on **Supabase**, accessed via **Prisma** (`@prisma/client` v6, migrations config via `@prisma/config` / [prisma.config.ts](../prisma.config.ts)). Schema lives in [prisma/schema.prisma](../prisma/schema.prisma); connection URLs come from `.env` (`DATABASE_URL`, `DIRECT_URL`).
+PostgreSQL is hosted on Supabase and accessed through Prisma 7 (`@prisma/client` + `@prisma/adapter-pg`).
+
+- Schema: [prisma/schema.prisma](../prisma/schema.prisma)
+- Migrations: `prisma/migrations/`
+- Prisma config: [prisma.config.ts](../prisma.config.ts)
 
 ## Models (current)
 
-### User
+### `User`
 
-Application profile linked to Supabase Auth. `id` should equal the Supabase Auth user UUID (`sub` from JWT).
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `String` (UUID, PK) | Same as Supabase Auth UID |
-| `email` | `String` (unique) | User email |
-| `nextcloud_file_path` | `String?` | Path to expense file on shared Nextcloud |
-| `active_template_id` | `String?` (FK) | Currently selected template for monthly emails |
-| `created_at` | `DateTime` | Profile creation time |
-
-**Relations:**
-
-- `templates` — all templates owned by the user
-- `activeTemplate` — optional FK to the template used for sends (`ActiveTemplate` relation name)
-
-### Template
-
-HTML email template with placeholders for AI-filled expense data.
+Application profile linked to Supabase Auth (`User.id` should match JWT `sub`).
 
 | Field | Type | Description |
-|-------|------|-------------|
-| `id` | `String` (UUID, PK) | Template id |
-| `user_id` | `String` (FK) | Owner |
-| `name` | `String` | Display name in the UI |
-| `content` | `String` | Raw HTML with variable placeholders |
-| `created_at` | `DateTime` | Creation time |
+|---|---|---|
+| `id` | `String` PK | Supabase Auth UID |
+| `email` | `String` unique | User email |
+| `data_source_type` | `DataSourceType` | Selected source (`FILE_UPLOAD` / `NEXTCLOUD`) |
+| `data_source_config` | `Json?` | Provider-specific configuration payload |
+| `active_template_id` | `String?` FK | Currently active template |
+| `created_at` | `DateTime` | Profile creation timestamp |
 
-**Relations:**
+Relations:
 
-- `user` — owner (`onDelete: Cascade` when user is deleted)
+- `templates` — owned templates
+- `activeTemplate` — selected template (`ActiveTemplate` relation)
+
+### `Template`
+
+HTML email template with dynamic placeholders.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `String` PK | Template id |
+| `user_id` | `String` FK | Owner id |
+| `name` | `String` | Display name |
+| `content` | `String` | Raw HTML |
+| `created_at` | `DateTime` | Creation timestamp |
+
+Relations:
+
+- `user` — owner (`onDelete: Cascade`)
 - `activeForUsers` — users who selected this template as active
+
+### `DataSourceType` enum
+
+| Value | Meaning |
+|---|---|
+| `FILE_UPLOAD` | Expense text/csv file stored in Supabase Storage |
+| `NEXTCLOUD` | Expense file fetched from Nextcloud WebDAV |
+
+## `data_source_config` shapes
+
+### `FILE_UPLOAD`
+
+```json
+{
+  "bucket": "expenses",
+  "filePath": "user-uuid/2026-06.txt",
+  "uploadedAt": "2026-06-05T12:00:00.000Z",
+  "originalFileName": "wydatki-czerwiec.txt"
+}
+```
+
+### `NEXTCLOUD`
+
+```json
+{
+  "filePath": "/shared/wydatki/2026-06.txt"
+}
+```
 
 ## Relationship diagram
 
@@ -47,7 +80,8 @@ erDiagram
   User {
     string id PK
     string email UK
-    string nextcloud_file_path
+    string data_source_type
+    json data_source_config
     string active_template_id FK
     datetime created_at
   }
@@ -60,71 +94,40 @@ erDiagram
   }
 ```
 
-**Business rules (intended):**
-
-- A user may have many templates; at most one is active via `active_template_id`.
-- Deleting a user cascades to their templates.
-- Setting `active_template_id` should reference a template owned by the same user (enforce in service layer until DB constraint is added).
-
-## Planned: SummaryLog
-
-Optional future table for monthly processing history (success/failure per user, timestamps). Not in schema yet.
-
 ## Migrations
 
-Initial migration: `20260603205715_init` — creates `User` and `Template` with indexes and foreign keys.
+| Migration | Description |
+|---|---|
+| `20260603205715_init` | Initial `User` + `Template` schema |
+| `20260604120000_drop_active_template_fk` | Placeholder migration to keep history consistent |
+| `20260605133200_add_data_sources` | Adds `DataSourceType`, `data_source_type`, `data_source_config`; migrates and drops `nextcloud_file_path` |
 
-### Workflow
+## Business rules
+
+- Every authenticated user is upserted on-demand in `TemplatesService.ensureUserExists`.
+- At most one active template per user (`active_template_id`).
+- `updateDataSource` enforces:
+  - Nextcloud path required for `NEXTCLOUD`
+  - existing upload config preserved when switching to `FILE_UPLOAD`
+- Upload endpoint stores file in Storage and persists source config in `User.data_source_config`.
+
+## Commands
 
 ```bash
-# After editing prisma/schema.prisma
-pnpm prisma migrate dev --name describe_change
+# apply local schema changes and create a migration
+pnpm prisma migrate dev --name <change_name>
 
-# Regenerate client
+# apply existing migrations (deploy/runtime envs)
+pnpm prisma migrate deploy
+
+# regenerate client
 pnpm prisma generate
 ```
 
-- **Runtime queries:** use `DATABASE_URL` (pooled).
-- **Migrations:** `prisma.config.ts` prefers `DIRECT_URL` for direct Postgres access.
+## Supabase notes
 
-Lock file: `prisma/migrations/migration_lock.toml` (provider: `postgresql`).
+- Runtime DB access uses `DATABASE_URL`.
+- Migrations prefer `DIRECT_URL` when available.
+- Storage operations are done server-side with `SUPABASE_SERVICE_ROLE_KEY`.
 
-## Supabase-specific notes
-
-### Auth UID sync
-
-When a user first signs up via Supabase Auth, their profile row must use `id = jwt.sub` and `email` from the token. Do not generate a separate UUID unrelated to Auth. Until a dedicated `UsersModule` exists, `TemplatesService` upserts the `User` row from the JWT when needed (e.g. `generateAndSaveTemplate`, `updateNextcloudFilePath`) — required for the `Template.user_id` foreign key.
-
-### Row Level Security (RLS)
-
-Migrations in this repo do not enable RLS. The NestJS API is the primary access path using the service role / connection string. If exposing Supabase client direct table access later, add RLS policies per table.
-
-### JWT vs database user
-
-Authentication proves identity via JWT; authorization and profile data live in `User` / `Template`. Handlers should resolve the DB user by `CurrentUser().id` or `CurrentUserGql()` (`sub` / `id`).
-
-## Prisma in the application
-
-`PrismaModule` registers a global-style injectable `PrismaService` that extends `PrismaClient` and calls `$connect()` in `onModuleInit`. Only **services** inject it (e.g. `TemplatesService`); resolvers and controllers stay thin.
-
-```typescript
-// src/prisma/prisma.service.ts
-@Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit {
-  async onModuleInit() {
-    await this.$connect();
-  }
-}
-```
-
-Imported in `AppModule` alongside feature modules that depend on persistence.
-
-## Useful commands
-
-| Command | Purpose |
-|---------|---------|
-| `pnpm prisma studio` | Browse data in GUI |
-| `pnpm prisma migrate status` | Check migration state |
-| `pnpm prisma db pull` | Introspect DB (use with care) |
-
-See [architecture.md](./architecture.md) for how services use the database.
+See [architecture.md](./architecture.md) for module and API interactions.

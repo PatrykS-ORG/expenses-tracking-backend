@@ -8,7 +8,8 @@ import { CurrentUserGql } from '../auth/current-user.graphql.decorator';
 import { TemplateSettings } from './models/template-settings.model';
 import { CreateTemplateInput } from './dto/create-template.input';
 import { UpdateTemplateInput } from './dto/update-template.input';
-import { UpdateNextcloudFilePathInput } from './dto/update-nextcloud-file-path.input';
+import { UpdateDataSourceInput } from './dto/update-data-source.input';
+import { SendTestEmailInput } from './dto/send-test-email.input';
 
 interface AuthenticatedUser {
   sub?: string;
@@ -36,7 +37,9 @@ export class TemplatesResolver {
 
   @UseGuards(GqlAuthGuard)
   @Query(() => TemplateSettings)
-  async myTemplateSettings(@CurrentUserGql() user: AuthenticatedUser) {
+  async myTemplateSettings(
+    @CurrentUserGql() user: AuthenticatedUser,
+  ): Promise<TemplateSettings> {
     return this.templatesService.getTemplateSettingsByUser(
       this.extractUserId(user),
       user.email,
@@ -75,7 +78,10 @@ export class TemplatesResolver {
     @CurrentUserGql() user: AuthenticatedUser,
     @Args('input') input: UpdateTemplateInput,
   ) {
-    return this.templatesService.updateTemplate(this.extractUserId(user), input);
+    return this.templatesService.updateTemplate(
+      this.extractUserId(user),
+      input,
+    );
   }
 
   @UseGuards(GqlAuthGuard)
@@ -84,7 +90,10 @@ export class TemplatesResolver {
     @CurrentUserGql() user: AuthenticatedUser,
     @Args('templateId') templateId: string,
   ) {
-    return this.templatesService.deleteTemplate(this.extractUserId(user), templateId);
+    return this.templatesService.deleteTemplate(
+      this.extractUserId(user),
+      templateId,
+    );
   }
 
   @UseGuards(GqlAuthGuard)
@@ -101,14 +110,28 @@ export class TemplatesResolver {
 
   @UseGuards(GqlAuthGuard)
   @Mutation(() => Boolean)
-  async updateNextcloudFilePath(
+  async updateDataSource(
     @CurrentUserGql() user: AuthenticatedUser,
-    @Args('input') input: UpdateNextcloudFilePathInput,
+    @Args('input') input: UpdateDataSourceInput,
   ) {
-    return this.templatesService.updateNextcloudFilePath(
+    return this.templatesService.updateDataSource(
       this.extractUserId(user),
       user.email,
+      input.dataSourceType,
       input.nextcloudFilePath,
+    );
+  }
+
+  @UseGuards(GqlAuthGuard)
+  @Mutation(() => Boolean)
+  async sendTestEmail(
+    @CurrentUserGql() user: AuthenticatedUser,
+    @Args('input') input: SendTestEmailInput,
+  ) {
+    return this.templatesService.sendTestEmail(
+      this.extractUserId(user),
+      user.email,
+      input.recipientEmail,
     );
   }
 }

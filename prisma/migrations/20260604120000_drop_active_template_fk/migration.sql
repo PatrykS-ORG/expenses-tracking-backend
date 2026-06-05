@@ -1,0 +1,2 @@
+-- No-op placeholder migration.
+-- This file exists to satisfy Prisma migration history consistency.

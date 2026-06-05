@@ -4,6 +4,7 @@ import { AiService } from '../ai/ai.service';
 import { GenerateTemplateInput } from './dto/generate-template.input';
 import { CreateTemplateInput } from './dto/create-template.input';
 import { UpdateTemplateInput } from './dto/update-template.input';
+import { Prisma } from '../generated/prisma/client';
 
 type TemplateEntity = Awaited<ReturnType<PrismaService['template']['create']>>;
 type UserEntity = Awaited<ReturnType<PrismaService['user']['upsert']>>;
@@ -120,7 +121,7 @@ export class TemplatesService {
   async deleteTemplate(userId: string, templateId: string): Promise<boolean> {
     await this.ensureTemplateOwnership(userId, templateId);
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const user = await tx.user.findUnique({
         where: { id: userId },
         select: { active_template_id: true },

@@ -13,7 +13,7 @@ This document outlines the core technologies, libraries, and tools used in the `
 
 ## Database, ORM & Cloud Services
 - **[Supabase](https://supabase.com/)**: PostgreSQL database and Authentication (JWT / JWKS).
-- **[Prisma](https://www.prisma.io/)**: ORM and migrations — `prisma` and `@prisma/client` **v6.19** at runtime; datasource/migrate config via **`@prisma/config` v7.8** ([prisma.config.ts](../prisma.config.ts)).
+- **[Prisma](https://www.prisma.io/)**: ORM and migrations — `prisma` and `@prisma/client` **v7** with **`@prisma/adapter-pg`**; client generated to `src/generated/prisma`; datasource/migrate config via [prisma.config.ts](../prisma.config.ts).
 
 ## AI
 - **[OpenAI Node SDK](https://github.com/openai/openai-node)**: Used against **DeepSeek** (`baseURL: https://api.deepseek.com`, model `deepseek-chat`) for HTML email template generation (`AiService`, `DEEPSEEK_API_KEY`).

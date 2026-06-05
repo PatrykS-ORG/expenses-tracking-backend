@@ -68,7 +68,7 @@ Use explicit relative imports (no path aliases configured).
 - GraphQL is primary for template/settings operations.
 - REST is used for:
   - smoke/auth endpoint (`GET /profile`)
-  - multipart upload endpoint (`POST /api/data-sources/upload`)
+  - expense file upload/preview/save endpoints (`/api/data-sources/upload*`)
 
 For file uploads:
 

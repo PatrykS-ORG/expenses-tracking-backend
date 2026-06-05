@@ -246,6 +246,28 @@ export class TemplatesService {
     });
   }
 
+  async getFileUploadSourceConfig(
+    userId: string,
+    userEmail?: string,
+  ): Promise<FileUploadDataSourceConfig> {
+    await this.ensureUserExists(userId, userEmail);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { data_source_config: true },
+    });
+
+    const fileUploadConfig = parseFileUploadConfig(
+      user?.data_source_config ?? null,
+    );
+    if (!fileUploadConfig) {
+      throw new NotFoundException(
+        'Upload an expense file before opening file preview',
+      );
+    }
+
+    return fileUploadConfig;
+  }
+
   async sendTestEmail(
     userId: string,
     userEmail: string | undefined,

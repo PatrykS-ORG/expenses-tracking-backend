@@ -121,6 +121,8 @@ Expense data source is resolved per user from:
 | `GET` | `/` | Public | Health/hello |
 | `GET` | `/profile` | JWT | Auth smoke test |
 | `POST` | `/api/data-sources/upload` | JWT | Upload `.txt/.csv` (max 2MB), set source to `FILE_UPLOAD` |
+| `GET` | `/api/data-sources/upload/current` | JWT | Return current uploaded file metadata + content for preview/edit UI |
+| `PUT` | `/api/data-sources/upload/current` | JWT | Overwrite currently configured uploaded file (`multipart`, field `file`) |
 
 ### GraphQL
 

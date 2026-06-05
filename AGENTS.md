@@ -1,90 +1,79 @@
 # AGENTS.md — expenses-tracking-backend
 
-NestJS 11 API for **ExpenseAI**: automated, personalized monthly expense summaries from Nextcloud files. The backend verifies Supabase JWTs (JWKS or legacy secret), persists data via **Prisma** against Supabase PostgreSQL, exposes a **GraphQL** API for templates and settings, and calls **DeepSeek** for onboarding template generation. Brevo SMTP, Nextcloud WebDAV, and the cron webhook are not implemented yet.
+NestJS 11 API for **ExpenseAI**.  
+Current scope includes:
 
-**Status:** Foundation plus templates — `PrismaModule`, `TemplatesModule`, `AiModule`, and GraphQL are wired. REST smoke endpoints remain for health and auth checks.
+- Supabase JWT auth (REST + GraphQL guards)
+- Prisma persistence (`User`, `Template`)
+- AI template generation and expense analysis (DeepSeek)
+- Data-source abstraction (`FILE_UPLOAD` via Supabase Storage, `NEXTCLOUD` via WebDAV)
+- Test-email sending through Brevo API
+
+Cron batch processing endpoint is still pending.
 
 ## Prerequisites
 
-- **Node.js** `24.16.0` (see `.nvmrc`)
-- **pnpm** (only package manager — do not use npm or yarn)
-- Supabase project with PostgreSQL and Auth enabled
-- Copy `.env.example` to `.env` and fill in values
+- Node.js `24.16.0`
+- pnpm (required package manager)
+- Supabase project (Auth + Postgres + Storage)
+- Copy `.env.example` to `.env`
 
 ## Commands
 
 | Command | Purpose |
-|---------|---------|
-| `pnpm install` | Install dependencies (runs `prisma generate` via postinstall) |
-| `pnpm run start:dev` | Dev server with watch (default port `3000`) |
-| `pnpm run build` | Compile to `dist/` |
-| `pnpm run start:prod` | Run compiled app |
-| `pnpm run lint` | ESLint (with auto-fix) |
-| `pnpm run format` | Prettier on `src/` and `test/` |
-| `pnpm run test` | Unit tests (`*.spec.ts` in `src/`) |
-| `pnpm run test:e2e` | E2E tests in `test/` |
-| `pnpm prisma migrate dev` | Create/apply migrations (uses `prisma.config.ts`) |
-| `pnpm prisma generate` | Regenerate Prisma Client after schema changes |
+|---|---|
+| `pnpm install` | Install deps and generate Prisma client |
+| `pnpm run start:dev` | Start backend in watch mode |
+| `pnpm run build` | Build Nest app |
+| `pnpm run lint` | Lint TypeScript files |
+| `pnpm run test` | Run unit tests |
+| `pnpm prisma migrate dev` | Create/apply migration in dev |
+| `pnpm prisma migrate deploy` | Apply existing migrations |
+| `pnpm prisma generate` | Regenerate Prisma client |
 
 ## Directory structure
 
 ```
 src/
-├── auth/                    # JwtStrategy, JwtAuthGuard, GqlAuthGuard, @CurrentUser*()
-├── prisma/                  # PrismaModule, PrismaService
-├── templates/               # GraphQL resolver, service, inputs, models
-├── ai/                      # AiService (DeepSeek)
-├── schema.gql               # Auto-generated GraphQL schema (do not edit)
-├── app.module.ts            # Root module
-├── app.controller.ts        # GET /, GET /profile
-├── app.service.ts
-└── main.ts                  # Bootstrap, CORS, PORT
+├── auth/                    # JWT strategy, guards, decorators
+├── prisma/                  # PrismaService + module
+├── ai/                      # DeepSeek integration
+├── templates/               # GraphQL templates + settings + test-email mutation
+├── data-sources/            # Upload REST endpoint + source providers/resolver
+├── email/                   # Brevo client + HTML template rendering helper
+├── schema.gql               # Auto-generated GraphQL schema
+├── app.controller.ts        # GET / and GET /profile
+├── app.module.ts
+└── main.ts
 
 prisma/
-├── schema.prisma            # User, Template models
-└── migrations/              # Applied SQL migrations
-
-docs/                        # architecture, conventions, database, tech-stack
-test/                        # E2E tests (*.e2e-spec.ts)
+├── schema.prisma
+└── migrations/
 ```
-
-Planned under `src/`: `users/`, `email/`, `webdav/`, `cron/`.
 
 ## Key architectural decisions
 
-- **Modular monolith** — one NestJS module per domain (service + GraphQL resolver and/or REST controller + DTOs/inputs).
-- **Supabase Auth** — frontend obtains JWT; backend validates via JWKS (`SUPABASE_URL`, ES256) or legacy `SUPABASE_JWT_SECRET` (HS256). GraphQL uses `GqlAuthGuard` and `@CurrentUserGql()`; REST uses `JwtAuthGuard` and `@CurrentUser()`.
-- **GraphQL (Code First)** — primary API for templates; playground at `/graphql` in dev; schema written to `src/schema.gql`.
-- **Prisma** — schema and migrations in `prisma/`; URLs from `DATABASE_URL` / `DIRECT_URL` via `prisma.config.ts`. All DB access through injectable `PrismaService`.
-- **REST** — `GET /`, `GET /profile` for hello and auth smoke tests only.
-- **Config** — `ConfigModule` is global; use `ConfigService` in services/strategies, not raw `process.env` in business logic (except bootstrap `PORT`).
+- GraphQL is the primary product API; REST is used for file upload and smoke checks.
+- User data source is normalized as:
+  - `data_source_type`
+  - `data_source_config` JSON
+- Data-source provider pattern in `src/data-sources/providers/` allows new connectors later.
+- Email sending uses Brevo HTTP endpoint (`/smtp/email`) through `EmailService`.
+- Prisma adapter strips SSL URL params and applies explicit TLS option from env.
 
-## Related documentation
+## Environment variables (high-level)
 
-| File | Contents |
-|------|----------|
-| [docs/tech-stack.md](./docs/tech-stack.md) | Libraries and versions |
-| [docs/architecture.md](./docs/architecture.md) | System design, auth flow, module graph, API |
-| [docs/conventions.md](./docs/conventions.md) | Coding patterns and how to add features |
-| [docs/database.md](./docs/database.md) | Schema, relationships, migrations |
-| [.env.example](./.env.example) | Required environment variables |
-
-## Pairing with the frontend
-
-Repo: `expenses-tracking-frontend` (sibling project). The React app uses Supabase Auth; authenticated requests to this API must send:
-
-```
-Authorization: Bearer <supabase_access_token>
-```
-
-GraphQL requests use the same header. CORS is enabled on the Nest app for local development.
+- DB/Auth: `DATABASE_URL`, `DIRECT_URL`, `DATABASE_SSL_REJECT_UNAUTHORIZED`, `SUPABASE_URL`, `SUPABASE_JWT_SECRET`
+- Storage: `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`
+- AI: `DEEPSEEK_API_KEY`
+- Email: `BREVO_API_KEY`, `MAIL_SENDER`, `MAIL_SENDER_NAME`, `BREVO_BASE_URL`
+- Nextcloud: `NEXTCLOUD_WEBDAV_URL`, `NEXTCLOUD_USERNAME`, `NEXTCLOUD_PASSWORD`
 
 ## Common pitfalls
 
-- Do **not** instantiate `PrismaClient` directly in controllers or services — use `PrismaService`.
-- Do **not** use npm/yarn — only `pnpm`.
-- `User.id` in Prisma must match Supabase Auth `sub` (UUID) when creating or upserting profiles.
-- Set **`SUPABASE_URL`** for JWT verification on current Supabase projects; `SUPABASE_JWT_SECRET` alone is for legacy HS256.
-- `class-validator` / `class-transformer` are not in `package.json` yet — add them when introducing validated REST DTOs.
-- Do **not** hand-edit `src/schema.gql`; it is generated by NestJS GraphQL.
-- The default [README.md](./README.md) is still the NestJS starter; prefer this file and `docs/` for project context.
+- Do not instantiate `PrismaClient` directly in feature code.
+- Do not hand-edit `src/schema.gql`.
+- Use `Authorization: Bearer <supabase_access_token>` for protected endpoints.
+- Keep secrets server-side only (never expose service role key to frontend).
+
+See `docs/architecture.md`, `docs/database.md`, and `docs/conventions.md` for full details.

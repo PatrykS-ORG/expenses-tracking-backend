@@ -9,11 +9,17 @@ import { join } from 'path';
 import { AiModule } from './ai/ai.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { TemplatesModule } from './templates/templates.module';
+import { DataSourcesModule } from './data-sources/data-sources.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [
+        join(process.cwd(), '.env'),
+        join(process.cwd(), 'expenses-tracking-backend', '.env'),
+      ],
     }),
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
@@ -27,6 +33,8 @@ import { TemplatesModule } from './templates/templates.module';
     AuthModule,
     AiModule,
     TemplatesModule,
+    DataSourcesModule,
+    EmailModule,
   ],
   controllers: [AppController],
   providers: [AppService],

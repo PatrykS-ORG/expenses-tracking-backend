@@ -3,6 +3,7 @@ import { TemplatesService } from './templates.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
 import { GenerateTemplateInput } from './dto/generate-template.input';
+import { EmailService } from '../email/email.service';
 
 describe('TemplatesService', () => {
   let service: TemplatesService;
@@ -22,6 +23,10 @@ describe('TemplatesService', () => {
     generateTemplate: jest.fn(),
   };
 
+  const emailServiceMock = {
+    sendEmail: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -30,6 +35,7 @@ describe('TemplatesService', () => {
         TemplatesService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: AiService, useValue: aiServiceMock },
+        { provide: EmailService, useValue: emailServiceMock },
       ],
     }).compile();
 

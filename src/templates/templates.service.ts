@@ -1,17 +1,36 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
 import { GenerateTemplateInput } from './dto/generate-template.input';
 import { CreateTemplateInput } from './dto/create-template.input';
 import { UpdateTemplateInput } from './dto/update-template.input';
-import { Prisma } from '../generated/prisma/client';
+import { DataSourceType, Prisma } from '../generated/prisma/client';
+import {
+  FileUploadDataSourceConfig,
+  parseFileUploadConfig,
+  parseNextcloudConfig,
+  toPrismaJsonValue,
+} from '../data-sources/data-source.types';
+import { EmailService } from '../email/email.service';
+import {
+  applyTemplateValues,
+  getExampleTemplateValues,
+} from '../email/template-renderer';
+import { DataSourceTypeEnum } from './models/data-source-type.enum';
 
 type TemplateEntity = Awaited<ReturnType<PrismaService['template']['create']>>;
-type UserEntity = Awaited<ReturnType<PrismaService['user']['upsert']>>;
-type TemplateSettingsEntity = Pick<
-  UserEntity,
-  'active_template_id' | 'nextcloud_file_path'
->;
+
+interface TemplateSettingsPayload {
+  active_template_id: string | null;
+  data_source_type: DataSourceTypeEnum;
+  nextcloud_file_path: string | null;
+  uploaded_file_path: string | null;
+}
 
 @Injectable()
 export class TemplatesService {
@@ -20,6 +39,7 @@ export class TemplatesService {
   constructor(
     private prisma: PrismaService,
     private aiService: AiService,
+    private emailService: EmailService,
   ) {}
 
   async findAllByUser(userId: string): Promise<TemplateEntity[]> {
@@ -32,13 +52,14 @@ export class TemplatesService {
   async getTemplateSettingsByUser(
     userId: string,
     userEmail?: string,
-  ): Promise<TemplateSettingsEntity> {
+  ): Promise<TemplateSettingsPayload> {
     await this.ensureUserExists(userId, userEmail);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         active_template_id: true,
-        nextcloud_file_path: true,
+        data_source_type: true,
+        data_source_config: true,
       },
     });
 
@@ -46,7 +67,15 @@ export class TemplatesService {
       throw new NotFoundException('User profile not found');
     }
 
-    return user;
+    const nextcloudConfig = parseNextcloudConfig(user.data_source_config);
+    const fileUploadConfig = parseFileUploadConfig(user.data_source_config);
+
+    return {
+      active_template_id: user.active_template_id,
+      data_source_type: user.data_source_type as DataSourceTypeEnum,
+      nextcloud_file_path: nextcloudConfig?.filePath || null,
+      uploaded_file_path: fileUploadConfig?.filePath || null,
+    };
   }
 
   async generateAndSaveTemplate(
@@ -140,7 +169,10 @@ export class TemplatesService {
     return true;
   }
 
-  async setActiveTemplate(userId: string, templateId: string): Promise<boolean> {
+  async setActiveTemplate(
+    userId: string,
+    templateId: string,
+  ): Promise<boolean> {
     await this.ensureTemplateOwnership(userId, templateId);
 
     await this.prisma.user.update({
@@ -151,18 +183,98 @@ export class TemplatesService {
     return true;
   }
 
-  async updateNextcloudFilePath(
+  async updateDataSource(
     userId: string,
     userEmail: string | undefined,
-    nextcloudFilePath: string,
+    dataSourceType: DataSourceType,
+    nextcloudFilePath?: string,
   ): Promise<boolean> {
     await this.ensureUserExists(userId, userEmail);
-    const path = nextcloudFilePath.trim();
+
+    if (dataSourceType === DataSourceType.NEXTCLOUD) {
+      const path = nextcloudFilePath?.trim() || '';
+      if (!path) {
+        throw new BadRequestException('Nextcloud file path cannot be empty');
+      }
+
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          data_source_type: DataSourceType.NEXTCLOUD,
+          data_source_config: toPrismaJsonValue({ filePath: path }),
+        },
+      });
+      return true;
+    }
+
+    const current = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        data_source_type: true,
+        data_source_config: true,
+      },
+    });
+    const existingUploadConfig = parseFileUploadConfig(
+      current?.data_source_config || null,
+    );
 
     await this.prisma.user.update({
       where: { id: userId },
-      data: { nextcloud_file_path: path.length > 0 ? path : null },
+      data: {
+        data_source_type: DataSourceType.FILE_UPLOAD,
+        data_source_config: existingUploadConfig
+          ? toPrismaJsonValue(existingUploadConfig)
+          : Prisma.JsonNull,
+      },
     });
+
+    return true;
+  }
+
+  async setFileUploadSource(
+    userId: string,
+    userEmail: string | undefined,
+    config: FileUploadDataSourceConfig,
+  ): Promise<void> {
+    await this.ensureUserExists(userId, userEmail);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        data_source_type: DataSourceType.FILE_UPLOAD,
+        data_source_config: toPrismaJsonValue(config),
+      },
+    });
+  }
+
+  async sendTestEmail(
+    userId: string,
+    userEmail: string | undefined,
+    recipientEmail: string,
+  ): Promise<boolean> {
+    await this.ensureUserExists(userId, userEmail);
+    const recipient = recipientEmail.trim();
+    if (!recipient) {
+      throw new BadRequestException('Recipient email cannot be empty');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        activeTemplate: true,
+      },
+    });
+
+    if (!user?.activeTemplate) {
+      throw new NotFoundException(
+        'Set an active template before sending a test email',
+      );
+    }
+
+    const values = getExampleTemplateValues(user.email);
+    const html = applyTemplateValues(user.activeTemplate.content, values);
+    const subject = `Test podsumowania — ${values.currentMonth}`;
+
+    await this.emailService.sendEmail(recipient, subject, html);
 
     return true;
   }

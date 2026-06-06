@@ -7,6 +7,8 @@ Current scope includes:
 - Prisma persistence (`User`, `Template`)
 - AI template generation and expense analysis (DeepSeek)
 - Data-source abstraction (`FILE_UPLOAD` via Supabase Storage, `NEXTCLOUD` via WebDAV)
+- Receipt OCR scan (Tesseract + Sharp) and AI expense extraction (DeepSeek)
+- Receipt expense approval (append to uploaded expense file)
 - Test-email sending through Brevo API
 
 Cron batch processing endpoint is still pending.
@@ -40,6 +42,7 @@ src/
 ├── ai/                      # DeepSeek integration
 ├── templates/               # GraphQL templates + settings + test-email mutation
 ├── data-sources/            # Upload REST endpoint + source providers/resolver
+├── receipts/                # Receipt scan REST + approveReceiptExpenses mutation + OCR
 ├── email/                   # Brevo client + HTML template rendering helper
 ├── schema.gql               # Auto-generated GraphQL schema
 ├── app.controller.ts        # GET / and GET /profile
@@ -53,7 +56,8 @@ prisma/
 
 ## Key architectural decisions
 
-- GraphQL is the primary product API; REST is used for file upload and smoke checks.
+- GraphQL is the primary product API; REST is used for file upload, receipt image scan, and smoke checks.
+- OCR language data files (`eng.traineddata`, `pol.traineddata`) live at the repo root for Tesseract.
 - User data source is normalized as:
   - `data_source_type`
   - `data_source_config` JSON
@@ -65,7 +69,7 @@ prisma/
 
 - DB/Auth: `DATABASE_URL`, `DIRECT_URL`, `DATABASE_SSL_REJECT_UNAUTHORIZED`, `SUPABASE_URL`, `SUPABASE_JWT_SECRET`
 - Storage: `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`
-- AI: `DEEPSEEK_API_KEY`
+- AI: `DEEPSEEK_API_KEY`, `DEEPSEEK_VISION_MODEL`, `RECEIPT_OCR_LANG`
 - Email: `BREVO_API_KEY`, `MAIL_SENDER`, `MAIL_SENDER_NAME`, `BREVO_BASE_URL`
 - Nextcloud: `NEXTCLOUD_WEBDAV_URL`, `NEXTCLOUD_USERNAME`, `NEXTCLOUD_PASSWORD`
 

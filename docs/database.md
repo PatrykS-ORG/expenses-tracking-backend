@@ -110,6 +110,7 @@ erDiagram
   - Nextcloud path required for `NEXTCLOUD`
   - existing upload config preserved when switching to `FILE_UPLOAD`
 - Upload endpoint stores file in Storage and persists source config in `User.data_source_config`.
+- `approveReceiptExpenses` appends approved receipt text to the user's existing `FILE_UPLOAD` expense file (creates content if the file is missing) and updates `uploadedAt` in `data_source_config`. Requires `FILE_UPLOAD` as the active data source.
 
 ## Commands
 

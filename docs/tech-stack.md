@@ -39,10 +39,18 @@
 - Used for:
   - onboarding template generation
   - expense text analysis
+  - receipt expense extraction from OCR text (`DEEPSEEK_VISION_MODEL`, defaults to `deepseek-chat`)
+
+## Receipt OCR and image processing
+
+- `sharp` — receipt image preprocessing (contrast, scaling, variants for OCR)
+- `tesseract.js` — OCR worker (`ReceiptOcrService`); language packs `eng.traineddata` / `pol.traineddata` at repo root
+- Configurable via `RECEIPT_OCR_LANG` (default `eng+pol`)
+- Native builds allowed in `pnpm-workspace.yaml` (`allowBuilds: sharp`, `tesseract.js`)
 
 ## Integrations
 
-- Supabase Storage client: `@supabase/supabase-js`
+- Supabase Storage REST API via `axios` (service role key in `SupabaseStorageService`)
 - Nextcloud WebDAV client: `webdav`
 - Brevo email API client: `axios`
 - Multipart upload handling: `multer`

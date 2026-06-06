@@ -6,7 +6,8 @@ ExpenseAI backend is a NestJS modular monolith between the React frontend and Su
 
 Implemented integrations:
 
-- DeepSeek (`AiService`) for template generation and expense analysis.
+- DeepSeek (`AiService`) for template generation, expense analysis, and receipt text extraction.
+- Tesseract.js + Sharp (`ReceiptOcrService`) for receipt image preprocessing and OCR (`eng.traineddata` / `pol.traineddata` at repo root).
 - Brevo HTTP API (`EmailService`) for sending rendered test emails.
 - Supabase Storage + Nextcloud WebDAV as pluggable expense data sources.
 
@@ -28,6 +29,8 @@ flowchart LR
     DataSourcesMod[DataSourcesModule]
     EmailMod[EmailModule]
     AiMod[AiModule]
+    ReceiptsMod[ReceiptsModule]
+    OcrMod[ReceiptOcrModule]
     PrismaSvc[PrismaService]
   end
   subgraph supabase [Supabase]
@@ -37,6 +40,7 @@ flowchart LR
   end
   subgraph external [External]
     DeepSeek[DeepSeek_API]
+    Tesseract[Tesseract_OCR]
     Brevo[Brevo_API]
     Nextcloud[Nextcloud_WebDAV]
   end
@@ -54,7 +58,12 @@ flowchart LR
   DataSourcesMod --> PrismaSvc
   DataSourcesMod --> Storage
   DataSourcesMod --> Nextcloud
+  ReceiptsMod --> AiMod
+  ReceiptsMod --> DataSourcesMod
+  ReceiptsMod --> TemplatesMod
+  AiMod --> OcrMod
   AiMod --> DeepSeek
+  OcrMod --> Tesseract
   EmailMod --> Brevo
   PrismaSvc --> Postgres
 ```
@@ -71,6 +80,7 @@ flowchart LR
 - `TemplatesModule`
 - `DataSourcesModule`
 - `EmailModule`
+- `ReceiptsModule`
 
 ### Implemented modules
 
@@ -78,10 +88,12 @@ flowchart LR
 |---|---|
 | `AuthModule` | JWT strategy + guards for REST/GraphQL |
 | `PrismaModule` | Shared Prisma adapter client |
-| `AiModule` | DeepSeek template generation and expense analysis |
+| `AiModule` | DeepSeek template generation, expense analysis, and receipt extraction |
+| `ReceiptOcrModule` | Tesseract worker lifecycle, image preprocessing (Sharp), OCR text extraction |
 | `TemplatesModule` | Template CRUD + active template + source settings + test-email mutation |
 | `DataSourcesModule` | Source providers, upload endpoint, source resolution |
 | `EmailModule` | Brevo email sending |
+| `ReceiptsModule` | Receipt scan REST endpoint + `approveReceiptExpenses` mutation |
 
 ### Planned modules
 
@@ -112,6 +124,8 @@ Expense data source is resolved per user from:
 - `FileUploadProvider` (read file from Supabase Storage)
 - `NextcloudProvider` (read file from Nextcloud WebDAV path)
 
+`SupabaseStorageService` talks to Supabase Storage via direct REST (`axios` + service role key), not the Supabase JS client. It supports `readTextFileOrEmpty` for optional file reads used by receipt approval.
+
 ## API surface
 
 ### REST
@@ -123,6 +137,7 @@ Expense data source is resolved per user from:
 | `POST` | `/api/data-sources/upload` | JWT | Upload `.txt/.csv` (max 2MB), set source to `FILE_UPLOAD` |
 | `GET` | `/api/data-sources/upload/current` | JWT | Return current uploaded file metadata + content for preview/edit UI |
 | `PUT` | `/api/data-sources/upload/current` | JWT | Overwrite currently configured uploaded file (`multipart`, field `file`) |
+| `POST` | `/api/receipts/scan` | JWT | Upload receipt image (`multipart`, field `file`; JPEG/PNG/WEBP, max 2MB); returns `{ extractedText }` |
 
 ### GraphQL
 
@@ -139,6 +154,22 @@ Endpoint: `/graphql`
 | Mutation | `setActiveTemplate` | JWT | Set active template |
 | Mutation | `updateDataSource` | JWT | Switch/update source config |
 | Mutation | `sendTestEmail` | JWT | Render active template with sample values and send via Brevo |
+| Mutation | `approveReceiptExpenses` | JWT | Append edited receipt expense text to the user's uploaded expense file |
+
+## Receipt scan + approval flow
+
+`POST /api/receipts/scan` (`ReceiptsController`):
+
+1. Validates image type and size.
+2. `AiService.extractExpensesFromImage` preprocesses the image (Sharp), runs OCR (`ReceiptOcrService` / Tesseract), then sends OCR text to DeepSeek.
+3. Returns plain-text expense lines (or `NO_EXPENSES_FOUND`).
+
+`approveReceiptExpenses` (`ReceiptsResolver` → `ReceiptsService`):
+
+1. Resolves the user's `FILE_UPLOAD` source config via `TemplatesService`.
+2. Reads current file content (empty string if missing).
+3. Appends approved receipt text and overwrites the Storage object.
+4. Updates `uploadedAt` in `data_source_config`.
 
 ## Rendering + email flow
 

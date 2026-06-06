@@ -69,6 +69,9 @@ Use explicit relative imports (no path aliases configured).
 - REST is used for:
   - smoke/auth endpoint (`GET /profile`)
   - expense file upload/preview/save endpoints (`/api/data-sources/upload*`)
+  - receipt image scan (`POST /api/receipts/scan`)
+
+`ReceiptsModule` is a hybrid module with both a REST controller (scan) and a GraphQL resolver (approve).
 
 For file uploads:
 
@@ -106,7 +109,7 @@ Current critical env groups:
 - DB/Auth: `DATABASE_URL`, `DIRECT_URL`, `DATABASE_SSL_REJECT_UNAUTHORIZED`, `SUPABASE_URL`, `SUPABASE_JWT_SECRET`
 - Storage: `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`
 - Email: `BREVO_API_KEY`, `MAIL_SENDER`, `MAIL_SENDER_NAME`, `BREVO_BASE_URL`
-- AI: `DEEPSEEK_API_KEY`
+- AI: `DEEPSEEK_API_KEY`, `DEEPSEEK_VISION_MODEL`, `RECEIPT_OCR_LANG`
 - Nextcloud: `NEXTCLOUD_WEBDAV_URL`, `NEXTCLOUD_USERNAME`, `NEXTCLOUD_PASSWORD`
 
 ## Testing

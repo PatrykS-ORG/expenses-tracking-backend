@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
+import { ReceiptOcrService } from '../receipts/receipt-ocr.service';
 
 const SYSTEM_PROMPT = `You are an expert HTML email designer and financial assistant.
 Create a personalized monthly expense summary email template in clean, responsive HTML.
@@ -32,6 +33,17 @@ Rules:
 3) Keep currency exactly as found when possible, otherwise use PLN.
 4) expensesList must contain at least 3 <li> items when enough data exists.`;
 
+const RECEIPT_SCAN_PROMPT = `You are a financial assistant that extracts expenses from receipt OCR text.
+Read the OCR text and return ONLY plain text lines in this format:
+<item or category>: <amount and currency>
+
+Rules:
+1) Do not return JSON, markdown, code blocks, bullets, or explanations.
+2) Return one expense per line.
+3) Keep original currency symbols/codes when visible.
+4) If you cannot read an amount confidently, skip that line.
+5) If no expenses can be extracted, return exactly: NO_EXPENSES_FOUND`;
+
 interface ExpenseSummary {
   userName: string;
   currentMonth: string;
@@ -46,7 +58,10 @@ interface ExpenseSummary {
 export class AiService {
   private readonly logger = new Logger(AiService.name);
 
-  constructor(private configService: ConfigService) {}
+  constructor(
+    private configService: ConfigService,
+    private receiptOcrService: ReceiptOcrService,
+  ) {}
 
   private createClient(): OpenAI {
     const apiKey = this.configService.get<string>('DEEPSEEK_API_KEY')?.trim();
@@ -174,6 +189,76 @@ export class AiService {
 
       throw new ServiceUnavailableException(
         'Could not analyze expenses from AI service',
+      );
+    }
+  }
+
+  async extractExpensesFromImage(
+    imageBuffer: Buffer,
+    mimeType: string,
+  ): Promise<string> {
+    const openai = this.createClient();
+    const model =
+      this.configService.get<string>('DEEPSEEK_VISION_MODEL')?.trim() ||
+      'deepseek-chat';
+
+    try {
+      const ocrText = await this.receiptOcrService.extractText(
+        imageBuffer,
+        mimeType,
+      );
+
+      const response = await openai.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: RECEIPT_SCAN_PROMPT },
+          {
+            role: 'user',
+            content: `Extract expense lines from this OCR receipt text:\n\n${ocrText}`,
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 2048,
+      });
+
+      const choice = response.choices[0];
+      const rawContent = choice?.message?.content;
+      if (!rawContent) {
+        throw new ServiceUnavailableException(
+          'AI returned empty receipt extraction',
+        );
+      }
+
+      const content = rawContent
+        .trim()
+        .replace(/^```(?:text|plaintext)?\s*/i, '')
+        .replace(/```$/i, '')
+        .trim();
+
+      if (!content) {
+        throw new ServiceUnavailableException('AI returned blank receipt text');
+      }
+
+      return content;
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) {
+        throw error;
+      }
+
+      const message =
+        error instanceof OpenAI.APIError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'Unknown error';
+
+      this.logger.error(
+        `Failed to extract expenses from receipt image: ${message}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      throw new ServiceUnavailableException(
+        'Could not extract expenses from receipt image',
       );
     }
   }

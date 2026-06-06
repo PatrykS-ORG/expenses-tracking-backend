@@ -4,6 +4,8 @@ allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
   prisma: true
+  sharp: true
+  tesseract.js: true
   unrs-resolver: true
 minimumReleaseAgeExclude:
   - openai@6.42.0

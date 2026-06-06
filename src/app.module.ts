@@ -11,6 +11,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { TemplatesModule } from './templates/templates.module';
 import { DataSourcesModule } from './data-sources/data-sources.module';
 import { EmailModule } from './email/email.module';
+import { ReceiptsModule } from './receipts/receipts.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { EmailModule } from './email/email.module';
     TemplatesModule,
     DataSourcesModule,
     EmailModule,
+    ReceiptsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

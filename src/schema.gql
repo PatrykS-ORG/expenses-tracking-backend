@@ -2,6 +2,10 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+input ApproveReceiptExpensesInput {
+  text: String!
+}
+
 input CreateTemplateInput {
   content: String!
   name: String!
@@ -25,6 +29,7 @@ input GenerateTemplateInput {
 }
 
 type Mutation {
+  approveReceiptExpenses(input: ApproveReceiptExpensesInput!): Boolean!
   createTemplate(input: CreateTemplateInput!): Template!
   deleteTemplate(templateId: String!): Boolean!
   generateTemplate(input: GenerateTemplateInput!): Template!

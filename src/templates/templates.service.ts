@@ -22,6 +22,7 @@ import {
   getExampleTemplateValues,
 } from '../email/template-renderer';
 import { DataSourceTypeEnum } from './models/data-source-type.enum';
+import { MAX_TEMPLATES_PER_USER } from './templates.constants';
 
 type TemplateEntity = Awaited<ReturnType<PrismaService['template']['create']>>;
 
@@ -88,6 +89,7 @@ export class TemplatesService {
     );
 
     await this.ensureUserExists(userId, userEmail);
+    await this.ensureTemplateLimitNotReached(userId);
 
     const generatedHtml = await this.aiService.generateTemplate(
       input.tone,
@@ -120,6 +122,7 @@ export class TemplatesService {
     input: CreateTemplateInput,
   ): Promise<TemplateEntity> {
     await this.ensureUserExists(userId, userEmail);
+    await this.ensureTemplateLimitNotReached(userId);
     const payload = this.validateTemplatePayload(input.name, input.content);
 
     return this.prisma.template.create({
@@ -299,6 +302,18 @@ export class TemplatesService {
     await this.emailService.sendEmail(recipient, subject, html);
 
     return true;
+  }
+
+  private async ensureTemplateLimitNotReached(userId: string): Promise<void> {
+    const templateCount = await this.prisma.template.count({
+      where: { user_id: userId },
+    });
+
+    if (templateCount >= MAX_TEMPLATES_PER_USER) {
+      throw new BadRequestException(
+        `You can have at most ${MAX_TEMPLATES_PER_USER} templates. Delete an existing template before adding a new one.`,
+      );
+    }
   }
 
   private validateTemplatePayload(name: string, content: string) {

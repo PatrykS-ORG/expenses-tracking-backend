@@ -1,9 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { TemplatesService } from './templates.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
 import { GenerateTemplateInput } from './dto/generate-template.input';
 import { EmailService } from '../email/email.service';
+import { MAX_TEMPLATES_PER_USER } from './templates.constants';
 
 describe('TemplatesService', () => {
   let service: TemplatesService;
@@ -12,6 +14,7 @@ describe('TemplatesService', () => {
     template: {
       findMany: jest.fn(),
       create: jest.fn(),
+      count: jest.fn(),
     },
     user: {
       upsert: jest.fn(),
@@ -86,6 +89,7 @@ describe('TemplatesService', () => {
       id: userId,
       email: 'u@test.com',
     });
+    prismaMock.template.count.mockResolvedValue(0);
     prismaMock.template.create.mockResolvedValue(createdTemplate);
     prismaMock.user.update.mockResolvedValue({ id: userId });
 
@@ -117,5 +121,47 @@ describe('TemplatesService', () => {
       data: { active_template_id: createdTemplate.id },
     });
     expect(result).toEqual(createdTemplate);
+  });
+
+  it('rejects template generation when user reached template limit', async () => {
+    const userId = 'user-42';
+    const input: GenerateTemplateInput = {
+      tone: 'formalny',
+      detailLevel: 'podsumowanie',
+      focus: 'zrownowazony',
+      visualStyle: 'minimalistyczny',
+    };
+
+    prismaMock.user.upsert.mockResolvedValue({
+      id: userId,
+      email: 'u@test.com',
+    });
+    prismaMock.template.count.mockResolvedValue(MAX_TEMPLATES_PER_USER);
+
+    await expect(
+      service.generateAndSaveTemplate(userId, 'u@test.com', input),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(aiServiceMock.generateTemplate).not.toHaveBeenCalled();
+    expect(prismaMock.template.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects manual template creation when user reached template limit', async () => {
+    const userId = 'user-42';
+
+    prismaMock.user.upsert.mockResolvedValue({
+      id: userId,
+      email: 'u@test.com',
+    });
+    prismaMock.template.count.mockResolvedValue(MAX_TEMPLATES_PER_USER);
+
+    await expect(
+      service.createTemplate(userId, 'u@test.com', {
+        name: 'New template',
+        content: '<html></html>',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prismaMock.template.create).not.toHaveBeenCalled();
   });
 });

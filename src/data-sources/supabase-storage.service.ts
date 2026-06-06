@@ -5,10 +5,15 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createClient } from '@supabase/supabase-js';
+import axios, { isAxiosError } from 'axios';
 import { FileUploadDataSourceConfig } from './data-source.types';
 
 const MAX_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024;
+
+interface StorageCredentials {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+}
 
 @Injectable()
 export class SupabaseStorageService {
@@ -35,19 +40,12 @@ export class SupabaseStorageService {
     const bucket = this.getDefaultBucket();
     const filePath = `${userId}/${monthKey}${extension}`;
 
-    const client = this.createClient();
-    const { error } = await client.storage
-      .from(bucket)
-      .upload(filePath, file.buffer, {
-        contentType: file.mimetype || 'text/plain',
-        upsert: true,
-      });
-
-    if (error) {
-      throw new InternalServerErrorException(
-        `Failed to upload expense file: ${error}`,
-      );
-    }
+    await this.uploadObject(
+      bucket,
+      filePath,
+      file.buffer,
+      file.mimetype || 'text/plain',
+    );
 
     return {
       bucket,
@@ -66,37 +64,23 @@ export class SupabaseStorageService {
       throw new BadRequestException('File content exceeds 2MB limit');
     }
 
-    const client = this.createClient();
-    const { error } = await client.storage
-      .from(bucket)
-      .upload(filePath, fileBuffer, {
-        contentType: this.getContentType(filePath),
-        upsert: true,
-      });
-
-    if (error) {
-      throw new InternalServerErrorException(
-        `Failed to overwrite expense file: ${error.message}`,
-      );
-    }
+    await this.uploadObject(
+      bucket,
+      filePath,
+      fileBuffer,
+      this.getContentType(filePath),
+    );
   }
 
   async readTextFile(bucket: string, filePath: string): Promise<string> {
-    const client = this.createClient();
-    const { data, error } = await client.storage
-      .from(bucket)
-      .download(filePath);
-
-    if (error || !data) {
-      throw new InternalServerErrorException(
-        `Failed to download file "${filePath}" from bucket "${bucket}": ${error?.message ?? 'Unknown error'}`,
-      );
-    }
-
-    return data.text();
+    return this.downloadTextFile(bucket, filePath, { allowMissing: false });
   }
 
-  private createClient(): ReturnType<typeof createClient> {
+  async readTextFileOrEmpty(bucket: string, filePath: string): Promise<string> {
+    return this.downloadTextFile(bucket, filePath, { allowMissing: true });
+  }
+
+  private getStorageCredentials(): StorageCredentials {
     const supabaseUrl = this.configService.get<string>('SUPABASE_URL')?.trim();
     const serviceRoleKey = this.configService
       .get<string>('SUPABASE_SERVICE_ROLE_KEY')
@@ -108,12 +92,122 @@ export class SupabaseStorageService {
       );
     }
 
-    return createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
+    return {
+      supabaseUrl: supabaseUrl.replace(/\/$/, ''),
+      serviceRoleKey,
+    };
+  }
+
+  private buildObjectUrl(
+    supabaseUrl: string,
+    bucket: string,
+    filePath: string,
+  ): string {
+    const encodedPath = filePath
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+
+    return `${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`;
+  }
+
+  private getAuthHeaders(serviceRoleKey: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+    };
+  }
+
+  private async downloadTextFile(
+    bucket: string,
+    filePath: string,
+    options: { allowMissing: boolean },
+  ): Promise<string> {
+    const { supabaseUrl, serviceRoleKey } = this.getStorageCredentials();
+    const url = this.buildObjectUrl(supabaseUrl, bucket, filePath);
+
+    try {
+      const response = await axios.get<string>(url, {
+        headers: this.getAuthHeaders(serviceRoleKey),
+        responseType: 'text',
+        validateStatus: () => true,
+      });
+
+      if (response.status === 404 || response.status === 400) {
+        if (options.allowMissing) {
+          return '';
+        }
+
+        throw new InternalServerErrorException(
+          `Failed to download file "${filePath}" from bucket "${bucket}": file not found`,
+        );
+      }
+
+      if (response.status < 200 || response.status >= 300) {
+        const details = String(response.data ?? '').slice(0, 200);
+        throw new InternalServerErrorException(
+          `Failed to download file "${filePath}" from bucket "${bucket}": HTTP ${response.status} ${details}`,
+        );
+      }
+
+      return response.data;
+    } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+
+      const message = isAxiosError(error)
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
+
+      throw new InternalServerErrorException(
+        `Failed to download file "${filePath}" from bucket "${bucket}": ${message}`,
+      );
+    }
+  }
+
+  private async uploadObject(
+    bucket: string,
+    filePath: string,
+    fileBuffer: Buffer,
+    contentType: string,
+  ): Promise<void> {
+    const { supabaseUrl, serviceRoleKey } = this.getStorageCredentials();
+    const url = this.buildObjectUrl(supabaseUrl, bucket, filePath);
+
+    try {
+      const response = await axios.post(url, fileBuffer, {
+        headers: {
+          ...this.getAuthHeaders(serviceRoleKey),
+          'Content-Type': contentType,
+          'x-upsert': 'true',
+        },
+        validateStatus: () => true,
+      });
+
+      if (response.status < 200 || response.status >= 300) {
+        const details = String(response.data ?? '').slice(0, 200);
+        throw new InternalServerErrorException(
+          `Failed to upload file "${filePath}" to bucket "${bucket}": HTTP ${response.status} ${details}`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+
+      const message = isAxiosError(error)
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
+
+      throw new InternalServerErrorException(
+        `Failed to upload file "${filePath}" to bucket "${bucket}": ${message}`,
+      );
+    }
   }
 
   private isAllowedFile(fileName: string): boolean {

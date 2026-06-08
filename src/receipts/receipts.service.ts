@@ -1,12 +1,23 @@
+import { decodeUploadedFile } from '../common/decode-uploaded-file';
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { AiService } from '../ai/ai.service';
 import { SupabaseStorageService } from '../data-sources/supabase-storage.service';
+import { ScanReceiptInput } from './dto/scan-receipt.input';
+import { ReceiptScanResult } from './models/receipt-scan-result.model';
 import { TemplatesService } from '../templates/templates.service';
+
+const SUPPORTED_IMAGE_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
 
 @Injectable()
 export class ReceiptsService {
   constructor(
     private readonly storageService: SupabaseStorageService,
     private readonly templatesService: TemplatesService,
+    private readonly aiService: AiService,
   ) {}
 
   async approveReceiptExpenses(
@@ -43,6 +54,23 @@ export class ReceiptsService {
     await this.templatesService.setFileUploadSource(userId, userEmail, updatedConfig);
 
     return true;
+  }
+
+  async scanReceipt(input: ScanReceiptInput): Promise<ReceiptScanResult> {
+    const file = decodeUploadedFile(input);
+
+    if (!SUPPORTED_IMAGE_TYPES.has(file.mimetype)) {
+      throw new BadRequestException(
+        'Only JPEG, PNG, and WEBP images are supported',
+      );
+    }
+
+    const extractedText = await this.aiService.extractExpensesFromImage(
+      file.buffer,
+      file.mimetype,
+    );
+
+    return { extractedText };
   }
 
   private appendReceiptText(existingContent: string, appendedText: string): string {

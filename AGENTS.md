@@ -3,7 +3,7 @@
 NestJS 11 API for **ExpenseAI**.  
 Current scope includes:
 
-- Supabase JWT auth (REST + GraphQL guards)
+- Supabase JWT auth (GraphQL guards)
 - Prisma persistence (`User`, `Template`)
 - AI template generation and expense analysis (DeepSeek)
 - Data-source abstraction (`FILE_UPLOAD` via Supabase Storage, `NEXTCLOUD` via WebDAV)
@@ -41,11 +41,11 @@ src/
 ├── prisma/                  # PrismaService + module
 ├── ai/                      # DeepSeek integration
 ├── templates/               # GraphQL templates + settings + test-email mutation
-├── data-sources/            # Upload REST endpoint + source providers/resolver
-├── receipts/                # Receipt scan REST + approveReceiptExpenses mutation + OCR
+├── data-sources/            # GraphQL upload queries/mutations + source providers
+├── receipts/                # Receipt scan + approveReceiptExpenses GraphQL mutations + OCR
 ├── email/                   # Brevo client + HTML template rendering helper
 ├── schema.gql               # Auto-generated GraphQL schema
-├── app.controller.ts        # GET / and GET /profile
+├── app.resolver.ts          # health + myProfile queries
 ├── app.module.ts
 └── main.ts
 
@@ -56,7 +56,7 @@ prisma/
 
 ## Key architectural decisions
 
-- GraphQL is the primary product API; REST is used for file upload, receipt image scan, and smoke checks.
+- GraphQL is the sole client-facing API; file uploads use base64-encoded mutation inputs.
 - OCR language data files (`eng.traineddata`, `pol.traineddata`) live at the repo root for Tesseract.
 - User data source is normalized as:
   - `data_source_type`

@@ -11,6 +11,15 @@ input CreateTemplateInput {
   name: String!
 }
 
+type CurrentExpenseFile {
+  bucket: String!
+  content: String!
+  dataSourceType: DataSourceType!
+  originalFileName: String
+  uploadedAt: String
+  uploadedFilePath: String!
+}
+
 enum DataSourceType {
   FILE_UPLOAD
   NEXTCLOUD
@@ -20,6 +29,12 @@ enum DataSourceType {
 A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
 """
 scalar DateTime
+
+input ExpenseFileUploadInput {
+  contentBase64: String!
+  fileName: String!
+  mimeType: String!
+}
 
 input GenerateTemplateInput {
   detailLevel: String!
@@ -33,15 +48,42 @@ type Mutation {
   createTemplate(input: CreateTemplateInput!): Template!
   deleteTemplate(templateId: String!): Boolean!
   generateTemplate(input: GenerateTemplateInput!): Template!
+  overwriteCurrentExpenseFile(input: ExpenseFileUploadInput!): UploadedExpenseFile!
+  scanReceipt(input: ScanReceiptInput!): ReceiptScanResult!
   sendTestEmail(input: SendTestEmailInput!): Boolean!
   setActiveTemplate(templateId: String!): Boolean!
   updateDataSource(input: UpdateDataSourceInput!): Boolean!
   updateTemplate(input: UpdateTemplateInput!): Template!
+  uploadExpenseFile(input: ExpenseFileUploadInput!): UploadedExpenseFile!
+}
+
+type Profile {
+  message: String!
+  user: ProfileUser!
+}
+
+type ProfileUser {
+  email: String
+  id: String!
+  roles: String
 }
 
 type Query {
+  currentExpenseFile: CurrentExpenseFile!
+  health: String!
+  myProfile: Profile!
   myTemplateSettings: TemplateSettings!
   myTemplates: [Template!]!
+}
+
+type ReceiptScanResult {
+  extractedText: String!
+}
+
+input ScanReceiptInput {
+  contentBase64: String!
+  fileName: String!
+  mimeType: String!
 }
 
 input SendTestEmailInput {
@@ -72,4 +114,12 @@ input UpdateTemplateInput {
   content: String!
   name: String!
   templateId: String!
+}
+
+type UploadedExpenseFile {
+  bucket: String!
+  dataSourceType: DataSourceType!
+  originalFileName: String
+  uploadedAt: String
+  uploadedFilePath: String!
 }

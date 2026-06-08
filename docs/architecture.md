@@ -93,7 +93,7 @@ flowchart LR
 | `TemplatesModule` | Template CRUD + active template + source settings + test-email mutation |
 | `DataSourcesModule` | Source providers, upload endpoint, source resolution |
 | `EmailModule` | Brevo email sending |
-| `ReceiptsModule` | Receipt scan REST endpoint + `approveReceiptExpenses` mutation |
+| `ReceiptsModule` | Receipt scan + `approveReceiptExpenses` GraphQL mutations + OCR |
 
 ### Planned modules
 
@@ -106,7 +106,7 @@ flowchart LR
 
 1. Frontend authenticates with Supabase and gets `access_token`.
 2. Frontend calls NestJS with `Authorization: Bearer <token>`.
-3. REST uses `JwtAuthGuard`; GraphQL uses `GqlAuthGuard`.
+3. REST uses `JwtAuthGuard`; GraphQL uses `GqlAuthGuard`. (REST controllers were removed; guards remain available if REST is reintroduced.)
 4. `JwtStrategy` validates token via:
    - Supabase JWKS (`SUPABASE_URL`) for ES256 projects
    - or legacy `SUPABASE_JWT_SECRET` for HS256
@@ -128,37 +128,32 @@ Expense data source is resolved per user from:
 
 ## API surface
 
-### REST
-
-| Method | Path | Auth | Notes |
-|---|---|---|---|
-| `GET` | `/` | Public | Health/hello |
-| `GET` | `/profile` | JWT | Auth smoke test |
-| `POST` | `/api/data-sources/upload` | JWT | Upload `.txt/.csv` (max 2MB), set source to `FILE_UPLOAD` |
-| `GET` | `/api/data-sources/upload/current` | JWT | Return current uploaded file metadata + content for preview/edit UI |
-| `PUT` | `/api/data-sources/upload/current` | JWT | Overwrite currently configured uploaded file (`multipart`, field `file`) |
-| `POST` | `/api/receipts/scan` | JWT | Upload receipt image (`multipart`, field `file`; JPEG/PNG/WEBP, max 2MB); returns `{ extractedText }` |
-
-### GraphQL
-
-Endpoint: `/graphql`
+All client-facing operations are exposed through GraphQL at `/graphql`.
 
 | Kind | Name | Auth | Notes |
 |---|---|---|---|
+| Query | `health` | Public | Health/hello smoke check |
+| Query | `myProfile` | JWT | Auth smoke test |
 | Query | `myTemplates` | JWT | List current user templates |
 | Query | `myTemplateSettings` | JWT | Active template + source settings |
+| Query | `currentExpenseFile` | JWT | Current uploaded file metadata + content |
 | Mutation | `generateTemplate` | JWT | Generate template via DeepSeek |
 | Mutation | `createTemplate` | JWT | Create template |
 | Mutation | `updateTemplate` | JWT | Update template |
 | Mutation | `deleteTemplate` | JWT | Delete template |
 | Mutation | `setActiveTemplate` | JWT | Set active template |
 | Mutation | `updateDataSource` | JWT | Switch/update source config |
+| Mutation | `uploadExpenseFile` | JWT | Upload `.txt/.csv` (max 2MB, base64), set source to `FILE_UPLOAD` |
+| Mutation | `overwriteCurrentExpenseFile` | JWT | Overwrite currently configured uploaded file (base64) |
 | Mutation | `sendTestEmail` | JWT | Render active template with sample values and send via Brevo |
+| Mutation | `scanReceipt` | JWT | Upload receipt image (JPEG/PNG/WEBP, max 2MB, base64); returns `{ extractedText }` |
 | Mutation | `approveReceiptExpenses` | JWT | Append edited receipt expense text to the user's uploaded expense file |
+
+File upload mutations accept `ExpenseFileUploadInput` / `ScanReceiptInput` with `fileName`, `mimeType`, and `contentBase64` fields.
 
 ## Receipt scan + approval flow
 
-`POST /api/receipts/scan` (`ReceiptsController`):
+`scanReceipt` (`ReceiptsResolver` → `ReceiptsService`):
 
 1. Validates image type and size.
 2. `AiService.extractExpensesFromImage` preprocesses the image (Sharp), runs OCR (`ReceiptOcrService` / Tesseract), then sends OCR text to DeepSeek.

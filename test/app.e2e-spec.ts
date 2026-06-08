@@ -16,11 +16,14 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/ (GET)', () => {
+  it('health (GraphQL)', () => {
     return request(app.getHttpServer())
-      .get('/')
+      .post('/graphql')
+      .send({ query: '{ health }' })
       .expect(200)
-      .expect('Hello World!');
+      .expect((res) => {
+        expect(res.body.data.health).toBe('Hello World!');
+      });
   });
 
   afterEach(async () => {

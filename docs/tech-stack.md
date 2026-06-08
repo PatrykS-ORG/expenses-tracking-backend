@@ -14,7 +14,7 @@
   - `@apollo/server`
   - `@as-integrations/express5`
   - `graphql`
-- REST endpoints for smoke checks and multipart upload.
+- All client-facing operations are GraphQL; file uploads use base64-encoded mutation inputs.
 
 ## Persistence and data
 

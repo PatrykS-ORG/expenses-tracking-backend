@@ -4,6 +4,8 @@ import { GqlAuthGuard } from '../auth/gql-auth.guard';
 import { CurrentUserGql } from '../auth/current-user.graphql.decorator';
 import { ReceiptsService } from './receipts.service';
 import { ApproveReceiptExpensesInput } from './dto/approve-receipt-expenses.input';
+import { ScanReceiptInput } from './dto/scan-receipt.input';
+import { ReceiptScanResult } from './models/receipt-scan-result.model';
 
 interface AuthenticatedUser {
   sub?: string;
@@ -34,5 +36,13 @@ export class ReceiptsResolver {
       user.email,
       input.text,
     );
+  }
+
+  @UseGuards(GqlAuthGuard)
+  @Mutation(() => ReceiptScanResult)
+  async scanReceipt(
+    @Args('input') input: ScanReceiptInput,
+  ): Promise<ReceiptScanResult> {
+    return this.receiptsService.scanReceipt(input);
   }
 }

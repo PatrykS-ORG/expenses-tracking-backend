@@ -17,18 +17,6 @@ src/
     └── <feature>.service.spec.ts
 ```
 
-### REST feature module
-
-```
-src/
-└── <feature>/
-    ├── <feature>.module.ts
-    ├── <feature>.controller.ts
-    ├── <feature>.service.ts
-    ├── dto/
-    └── <feature>.service.spec.ts
-```
-
 ### Provider pattern (for pluggable integrations)
 
 `src/data-sources/` introduces provider-style structure:
@@ -38,8 +26,9 @@ src/data-sources/
 ├── data-source.provider.ts
 ├── data-source-resolver.service.ts
 ├── data-source.types.ts
-├── data-sources.controller.ts
 ├── data-sources.module.ts
+├── data-sources.resolver.ts
+├── data-sources.service.ts
 └── providers/
     ├── file-upload.provider.ts
     └── nextcloud.provider.ts
@@ -65,25 +54,14 @@ Use explicit relative imports (no path aliases configured).
 
 ## API conventions
 
-- GraphQL is primary for template/settings operations.
-- REST is used for:
-  - smoke/auth endpoint (`GET /profile`)
-  - expense file upload/preview/save endpoints (`/api/data-sources/upload*`)
-  - receipt image scan (`POST /api/receipts/scan`)
-
-`ReceiptsModule` is a hybrid module with both a REST controller (scan) and a GraphQL resolver (approve).
-
-For file uploads:
-
-- Guard with `JwtAuthGuard`
-- Use `FileInterceptor('file')`
-- Validate file type and size in service/controller
+- GraphQL is the sole client-facing API at `/graphql`.
+- File uploads use base64-encoded inputs (`ExpenseFileUploadInput`, `ScanReceiptInput`) with a 2MB decoded size limit.
 
 ## Auth conventions
 
-- REST handlers: `@UseGuards(JwtAuthGuard)` + `@CurrentUser()`
 - GraphQL handlers: `@UseGuards(GqlAuthGuard)` + `@CurrentUserGql()`
 - Resolve user id via `sub ?? id` in GraphQL payload.
+- `JwtAuthGuard` / `@CurrentUser()` remain available for future REST endpoints if needed.
 
 ## Service layer rules
 

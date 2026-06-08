@@ -6,9 +6,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { isAxiosError } from 'axios';
+import { DecodedFileUpload, MAX_UPLOAD_SIZE_BYTES } from '../common/decode-uploaded-file';
 import { FileUploadDataSourceConfig } from './data-source.types';
-
-const MAX_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024;
 
 interface StorageCredentials {
   supabaseUrl: string;
@@ -25,12 +24,8 @@ export class SupabaseStorageService {
 
   async uploadExpenseFile(
     userId: string,
-    file: Express.Multer.File,
+    file: DecodedFileUpload,
   ): Promise<FileUploadDataSourceConfig> {
-    if (!file) {
-      throw new BadRequestException('Missing file');
-    }
-
     if (!this.isAllowedFile(file.originalname)) {
       throw new BadRequestException('Only .txt and .csv files are supported');
     }

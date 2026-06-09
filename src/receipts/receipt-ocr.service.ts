@@ -74,7 +74,9 @@ export class ReceiptOcrService implements OnModuleInit, OnModuleDestroy {
         `Failed OCR extraction from receipt image: ${message}`,
         error instanceof Error ? error.stack : undefined,
       );
-      throw new ServiceUnavailableException('Could not read text from receipt image');
+      throw new ServiceUnavailableException(
+        'Could not read text from receipt image',
+      );
     }
   }
 
@@ -146,7 +148,8 @@ export class ReceiptOcrService implements OnModuleInit, OnModuleDestroy {
   }
 
   private countMeaningfulWords(text: string): number {
-    return text.split(/\s+/).filter((word) => word.replace(/\W/g, '').length > 0)
-      .length;
+    return text
+      .split(/\s+/)
+      .filter((word) => word.replace(/\W/g, '').length > 0).length;
   }
 }

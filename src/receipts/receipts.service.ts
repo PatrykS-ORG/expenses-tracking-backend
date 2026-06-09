@@ -30,10 +30,8 @@ export class ReceiptsService {
       throw new BadRequestException('Receipt expense text cannot be empty');
     }
 
-    const uploadedFileConfig = await this.templatesService.getFileUploadSourceConfig(
-      userId,
-      userEmail,
-    );
+    const uploadedFileConfig =
+      await this.templatesService.getFileUploadSourceConfig(userId, userEmail);
     const currentContent = await this.storageService.readTextFileOrEmpty(
       uploadedFileConfig.bucket,
       uploadedFileConfig.filePath,
@@ -51,7 +49,11 @@ export class ReceiptsService {
       ...uploadedFileConfig,
       uploadedAt: new Date().toISOString(),
     };
-    await this.templatesService.setFileUploadSource(userId, userEmail, updatedConfig);
+    await this.templatesService.setFileUploadSource(
+      userId,
+      userEmail,
+      updatedConfig,
+    );
 
     return true;
   }
@@ -73,7 +75,10 @@ export class ReceiptsService {
     return { extractedText };
   }
 
-  private appendReceiptText(existingContent: string, appendedText: string): string {
+  private appendReceiptText(
+    existingContent: string,
+    appendedText: string,
+  ): string {
     const existing = existingContent.trimEnd();
     if (!existing) {
       return `${appendedText}\n`;

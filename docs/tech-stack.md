@@ -64,8 +64,10 @@
 
 - Jest 30 (`jest`, `ts-jest`)
 - Supertest (`supertest`)
-- ESLint 9 + TypeScript ESLint
-- Prettier 3
+- ESLint 9 + TypeScript ESLint + Prettier 3
+- `pnpm run lint` — ESLint and Prettier checks
+- `pnpm run format` — apply Prettier formatting
+- Husky pre-commit hook — `lint-staged` on staged files
 
 ## Notes
 

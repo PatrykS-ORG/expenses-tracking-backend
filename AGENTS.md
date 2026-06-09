@@ -22,16 +22,21 @@ Cron batch processing endpoint is still pending.
 
 ## Commands
 
-| Command | Purpose |
-|---|---|
-| `pnpm install` | Install deps and generate Prisma client |
-| `pnpm run start:dev` | Start backend in watch mode |
-| `pnpm run build` | Build Nest app |
-| `pnpm run lint` | Lint TypeScript files |
-| `pnpm run test` | Run unit tests |
-| `pnpm prisma migrate dev` | Create/apply migration in dev |
-| `pnpm prisma migrate deploy` | Apply existing migrations |
-| `pnpm prisma generate` | Regenerate Prisma client |
+| Command                      | Purpose                                    |
+| ---------------------------- | ------------------------------------------ |
+| `pnpm install`               | Install deps and generate Prisma client    |
+| `pnpm run start:dev`         | Start backend in watch mode                |
+| `pnpm run build`             | Build Nest app                             |
+| `pnpm run lint`              | ESLint + Prettier check                    |
+| `pnpm run lint:fix`          | Auto-fix ESLint and Prettier issues        |
+| `pnpm run format`            | Format all files with Prettier             |
+| `pnpm run format:check`      | Verify Prettier formatting without writing |
+| `pnpm run test`              | Run unit tests                             |
+| `pnpm prisma migrate dev`    | Create/apply migration in dev              |
+| `pnpm prisma migrate deploy` | Apply existing migrations                  |
+| `pnpm prisma generate`       | Regenerate Prisma client                   |
+
+A Husky pre-commit hook runs `lint-staged` (ESLint + Prettier) on staged files before each commit.
 
 ## Directory structure
 

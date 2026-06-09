@@ -84,22 +84,22 @@ flowchart LR
 
 ### Implemented modules
 
-| Module | Responsibility |
-|---|---|
-| `AuthModule` | JWT strategy + guards for REST/GraphQL |
-| `PrismaModule` | Shared Prisma adapter client |
-| `AiModule` | DeepSeek template generation, expense analysis, and receipt extraction |
-| `ReceiptOcrModule` | Tesseract worker lifecycle, image preprocessing (Sharp), OCR text extraction |
-| `TemplatesModule` | Template CRUD + active template + source settings + test-email mutation |
-| `DataSourcesModule` | Source providers, upload endpoint, source resolution |
-| `EmailModule` | Brevo email sending |
-| `ReceiptsModule` | Receipt scan + `approveReceiptExpenses` GraphQL mutations + OCR |
+| Module              | Responsibility                                                               |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `AuthModule`        | JWT strategy + guards for REST/GraphQL                                       |
+| `PrismaModule`      | Shared Prisma adapter client                                                 |
+| `AiModule`          | DeepSeek template generation, expense analysis, and receipt extraction       |
+| `ReceiptOcrModule`  | Tesseract worker lifecycle, image preprocessing (Sharp), OCR text extraction |
+| `TemplatesModule`   | Template CRUD + active template + source settings + test-email mutation      |
+| `DataSourcesModule` | Source providers, upload endpoint, source resolution                         |
+| `EmailModule`       | Brevo email sending                                                          |
+| `ReceiptsModule`    | Receipt scan + `approveReceiptExpenses` GraphQL mutations + OCR              |
 
 ### Planned modules
 
-| Module | Responsibility |
-|---|---|
-| `CronModule` | Batch processing endpoint for monthly summaries |
+| Module        | Responsibility                                  |
+| ------------- | ----------------------------------------------- |
+| `CronModule`  | Batch processing endpoint for monthly summaries |
 | `UsersModule` | Dedicated profile logic beyond on-demand upsert |
 
 ## Authentication flow
@@ -130,24 +130,24 @@ Expense data source is resolved per user from:
 
 All client-facing operations are exposed through GraphQL at `/graphql`.
 
-| Kind | Name | Auth | Notes |
-|---|---|---|---|
-| Query | `health` | Public | Health/hello smoke check |
-| Query | `myProfile` | JWT | Auth smoke test |
-| Query | `myTemplates` | JWT | List current user templates |
-| Query | `myTemplateSettings` | JWT | Active template + source settings |
-| Query | `currentExpenseFile` | JWT | Current uploaded file metadata + content |
-| Mutation | `generateTemplate` | JWT | Generate template via DeepSeek |
-| Mutation | `createTemplate` | JWT | Create template |
-| Mutation | `updateTemplate` | JWT | Update template |
-| Mutation | `deleteTemplate` | JWT | Delete template |
-| Mutation | `setActiveTemplate` | JWT | Set active template |
-| Mutation | `updateDataSource` | JWT | Switch/update source config |
-| Mutation | `uploadExpenseFile` | JWT | Upload `.txt/.csv` (max 2MB, base64), set source to `FILE_UPLOAD` |
-| Mutation | `overwriteCurrentExpenseFile` | JWT | Overwrite currently configured uploaded file (base64) |
-| Mutation | `sendTestEmail` | JWT | Render active template with sample values and send via Brevo |
-| Mutation | `scanReceipt` | JWT | Upload receipt image (JPEG/PNG/WEBP, max 2MB, base64); returns `{ extractedText }` |
-| Mutation | `approveReceiptExpenses` | JWT | Append edited receipt expense text to the user's uploaded expense file |
+| Kind     | Name                          | Auth   | Notes                                                                              |
+| -------- | ----------------------------- | ------ | ---------------------------------------------------------------------------------- |
+| Query    | `health`                      | Public | Health/hello smoke check                                                           |
+| Query    | `myProfile`                   | JWT    | Auth smoke test                                                                    |
+| Query    | `myTemplates`                 | JWT    | List current user templates                                                        |
+| Query    | `myTemplateSettings`          | JWT    | Active template + source settings                                                  |
+| Query    | `currentExpenseFile`          | JWT    | Current uploaded file metadata + content                                           |
+| Mutation | `generateTemplate`            | JWT    | Generate template via DeepSeek                                                     |
+| Mutation | `createTemplate`              | JWT    | Create template                                                                    |
+| Mutation | `updateTemplate`              | JWT    | Update template                                                                    |
+| Mutation | `deleteTemplate`              | JWT    | Delete template                                                                    |
+| Mutation | `setActiveTemplate`           | JWT    | Set active template                                                                |
+| Mutation | `updateDataSource`            | JWT    | Switch/update source config                                                        |
+| Mutation | `uploadExpenseFile`           | JWT    | Upload `.txt/.csv` (max 2MB, base64), set source to `FILE_UPLOAD`                  |
+| Mutation | `overwriteCurrentExpenseFile` | JWT    | Overwrite currently configured uploaded file (base64)                              |
+| Mutation | `sendTestEmail`               | JWT    | Render active template with sample values and send via Brevo                       |
+| Mutation | `scanReceipt`                 | JWT    | Upload receipt image (JPEG/PNG/WEBP, max 2MB, base64); returns `{ extractedText }` |
+| Mutation | `approveReceiptExpenses`      | JWT    | Append edited receipt expense text to the user's uploaded expense file             |
 
 File upload mutations accept `ExpenseFileUploadInput` / `ScanReceiptInput` with `fileName`, `mimeType`, and `contentBase64` fields.
 

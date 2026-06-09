@@ -22,7 +22,8 @@ describe('AppController (e2e)', () => {
       .send({ query: '{ health }' })
       .expect(200)
       .expect((res) => {
-        expect(res.body.data.health).toBe('Hello World!');
+        const body = res.body as { data: { health: string } };
+        expect(body.data.health).toBe('Hello World!');
       });
   });
 

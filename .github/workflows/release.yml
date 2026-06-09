@@ -1,15 +1,16 @@
 name: Create Release Tag
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches:
       - production
+
+permissions:
+  contents: write
 
 jobs:
   tag:
     name: Create Git Tag
-    if: github.event.pull_request.merged == true
     runs-on: self-hosted
 
     steps:
@@ -17,6 +18,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.OWNER_AUTH_TOKEN }}
 
       - name: Bump version and push tag
         id: tag_version

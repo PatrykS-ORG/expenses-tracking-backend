@@ -1,0 +1,40 @@
+name: Deploy to Homelab expenses-tracking-backend
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  deploy:
+    name: Deploy Application
+    runs-on: self-hosted
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        run: echo "VERSION=$(echo ${{ github.ref }} | sed -e 's|refs/tags/||')" >> $GITHUB_ENV
+
+      - name: Build and restart Docker containers
+        run: |
+          TAG=${{ env.VERSION }} docker compose -f docker-compose-prod.yml up -d --build --remove-orphans
+        env:
+          NODE_ENV: production
+          PORT: ${{ vars.PORT }}
+          MAIL_SENDER: ${{ vars.MAIL_SENDER }}
+          MAIL_SENDER_NAME: ${{ vars.MAIL_SENDER_NAME }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          BREVO_BASE_URL: ${{ vars.BREVO_BASE_URL }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_VISION_MODEL: ${{ vars.DEEPSEEK_VISION_MODEL }}
+          RECEIPT_OCR_LANG: ${{ vars.RECEIPT_OCR_LANG }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_SSL_REJECT_UNAUTHORIZED: ${{ vars.DATABASE_SSL_REJECT_UNAUTHORIZED }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_STORAGE_BUCKET: ${{ vars.SUPABASE_STORAGE_BUCKET }}

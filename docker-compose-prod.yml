@@ -1,0 +1,35 @@
+services:
+  expenses-tracking-api:
+    image: expenses-tracking-backend:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${TAG:-latest}
+    container_name: expenses-api
+    restart: always
+    ports:
+      - '5173:5173'
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-5173}
+      APP_VERSION: ${TAG:-latest}
+      MAIL_SENDER: ${MAIL_SENDER}
+      MAIL_SENDER_NAME: ${MAIL_SENDER_NAME}
+      BREVO_API_KEY: ${BREVO_API_KEY}
+      BREVO_BASE_URL: ${BREVO_BASE_URL}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      DIRECT_URL: ${DIRECT_URL}
+      DATABASE_SSL_REJECT_UNAUTHORIZED: ${DATABASE_SSL_REJECT_UNAUTHORIZED}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET}
+    networks:
+      - homelab_net
+
+networks:
+  homelab_net:
+    external: true
+    name: homelab_shared_network

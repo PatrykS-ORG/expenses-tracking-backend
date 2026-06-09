@@ -24,9 +24,12 @@ import { ReceiptsModule } from './receipts/receipts.module';
     }),
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
-      autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+      autoSchemaFile:
+        process.env.NODE_ENV === 'production'
+          ? true
+          : join(process.cwd(), 'src/schema.gql'),
       sortSchema: true,
-      playground: true,
+      playground: process.env.NODE_ENV !== 'production',
       // Required so GqlAuthGuard / JwtStrategy can read Authorization from req
       context: ({ req }: { req: Request }) => ({ req }),
     }),

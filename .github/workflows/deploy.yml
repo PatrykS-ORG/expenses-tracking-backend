@@ -18,6 +18,28 @@ jobs:
       - name: Extract version from tag
         run: echo "VERSION=$(echo ${{ github.ref }} | sed -e 's|refs/tags/||')" >> $GITHUB_ENV
 
+      - name: Sanitize PATH for self-hosted runner
+        run: |
+          CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v '^/root/' | paste -sd: -)
+          echo "PATH=$CLEAN_PATH" >> "$GITHUB_ENV"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        run: pnpm prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
       - name: Build and restart Docker containers
         run: |
           TAG=${{ env.VERSION }} docker compose -f docker-compose-prod.yml up -d --build --remove-orphans

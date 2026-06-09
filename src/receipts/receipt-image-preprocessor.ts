@@ -113,12 +113,7 @@ async function buildContrastVariant(basePng: Buffer): Promise<Buffer> {
       .png()
       .toBuffer();
   } catch {
-    return sharp(basePng)
-      .greyscale()
-      .normalize()
-      .sharpen()
-      .png()
-      .toBuffer();
+    return sharp(basePng).greyscale().normalize().sharpen().png().toBuffer();
   }
 }
 
@@ -175,7 +170,9 @@ export async function preprocessReceiptImagesForOcr(
   const basePng = await prepareBaseGrayscalePng(imageBuffer);
 
   const variants = await Promise.all([
-    buildVariantSafely('contrast-enhanced', () => buildContrastVariant(basePng)),
+    buildVariantSafely('contrast-enhanced', () =>
+      buildContrastVariant(basePng),
+    ),
     buildVariantSafely('adaptive-threshold', () =>
       buildAdaptiveThresholdVariant(basePng),
     ),

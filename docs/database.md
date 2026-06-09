@@ -12,14 +12,14 @@ PostgreSQL is hosted on Supabase and accessed through Prisma 7 (`@prisma/client`
 
 Application profile linked to Supabase Auth (`User.id` should match JWT `sub`).
 
-| Field | Type | Description |
-|---|---|---|
-| `id` | `String` PK | Supabase Auth UID |
-| `email` | `String` unique | User email |
-| `data_source_type` | `DataSourceType` | Selected source (`FILE_UPLOAD` / `NEXTCLOUD`) |
-| `data_source_config` | `Json?` | Provider-specific configuration payload |
-| `active_template_id` | `String?` FK | Currently active template |
-| `created_at` | `DateTime` | Profile creation timestamp |
+| Field                | Type             | Description                                   |
+| -------------------- | ---------------- | --------------------------------------------- |
+| `id`                 | `String` PK      | Supabase Auth UID                             |
+| `email`              | `String` unique  | User email                                    |
+| `data_source_type`   | `DataSourceType` | Selected source (`FILE_UPLOAD` / `NEXTCLOUD`) |
+| `data_source_config` | `Json?`          | Provider-specific configuration payload       |
+| `active_template_id` | `String?` FK     | Currently active template                     |
+| `created_at`         | `DateTime`       | Profile creation timestamp                    |
 
 Relations:
 
@@ -30,13 +30,13 @@ Relations:
 
 HTML email template with dynamic placeholders.
 
-| Field | Type | Description |
-|---|---|---|
-| `id` | `String` PK | Template id |
-| `user_id` | `String` FK | Owner id |
-| `name` | `String` | Display name |
-| `content` | `String` | Raw HTML |
-| `created_at` | `DateTime` | Creation timestamp |
+| Field        | Type        | Description        |
+| ------------ | ----------- | ------------------ |
+| `id`         | `String` PK | Template id        |
+| `user_id`    | `String` FK | Owner id           |
+| `name`       | `String`    | Display name       |
+| `content`    | `String`    | Raw HTML           |
+| `created_at` | `DateTime`  | Creation timestamp |
 
 Relations:
 
@@ -45,10 +45,10 @@ Relations:
 
 ### `DataSourceType` enum
 
-| Value | Meaning |
-|---|---|
+| Value         | Meaning                                          |
+| ------------- | ------------------------------------------------ |
 | `FILE_UPLOAD` | Expense text/csv file stored in Supabase Storage |
-| `NEXTCLOUD` | Expense file fetched from Nextcloud WebDAV |
+| `NEXTCLOUD`   | Expense file fetched from Nextcloud WebDAV       |
 
 ## `data_source_config` shapes
 
@@ -96,11 +96,11 @@ erDiagram
 
 ## Migrations
 
-| Migration | Description |
-|---|---|
-| `20260603205715_init` | Initial `User` + `Template` schema |
-| `20260604120000_drop_active_template_fk` | Placeholder migration to keep history consistent |
-| `20260605133200_add_data_sources` | Adds `DataSourceType`, `data_source_type`, `data_source_config`; migrates and drops `nextcloud_file_path` |
+| Migration                                | Description                                                                                               |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `20260603205715_init`                    | Initial `User` + `Template` schema                                                                        |
+| `20260604120000_drop_active_template_fk` | Placeholder migration to keep history consistent                                                          |
+| `20260605133200_add_data_sources`        | Adds `DataSourceType`, `data_source_type`, `data_source_config`; migrates and drops `nextcloud_file_path` |
 
 ## Business rules
 

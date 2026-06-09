@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { isAxiosError } from 'axios';
-import { DecodedFileUpload, MAX_UPLOAD_SIZE_BYTES } from '../common/decode-uploaded-file';
+import {
+  DecodedFileUpload,
+  MAX_UPLOAD_SIZE_BYTES,
+} from '../common/decode-uploaded-file';
 import { FileUploadDataSourceConfig } from './data-source.types';
 
 interface StorageCredentials {

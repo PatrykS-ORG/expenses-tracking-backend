@@ -27,4 +27,5 @@ jobs:
           DEFAULT_BUMP: patch
 
       - name: Print new tag
-        run: echo "New tag created: ${{ steps.tag_version.outputs.new_tag }}"
+        run: |
+          echo "New tag created: ${{ steps.tag_version.outputs.new_tag }}"

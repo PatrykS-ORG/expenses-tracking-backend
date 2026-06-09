@@ -22,7 +22,7 @@ jobs:
         id: tag_version
         uses: anothrNick/github-tag-action@1.67.0
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.OWNER_AUTH_TOKEN }}
           WITH_V: true
           DEFAULT_BUMP: patch
 

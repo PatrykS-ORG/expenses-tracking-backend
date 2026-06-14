@@ -13,17 +13,48 @@ enum DataSourceType {
   NEXTCLOUD
 }
 
+enum SummaryLogStatus {
+  SUCCESS
+  FAILURE
+}
+
+enum SummaryEmailLanguage {
+  PL
+  EN
+}
+
 model User {
-  id                 String         @id @default(uuid()) // Powinno być synchronizowane z Supabase Auth UID
-  email              String         @unique
-  data_source_type   DataSourceType @default(FILE_UPLOAD)
-  data_source_config Json?
-  active_template_id String?
-  created_at         DateTime       @default(now())
-  templates          Template[]
+  id                    String               @id @default(uuid()) // Powinno być synchronizowane z Supabase Auth UID
+  email                 String               @unique
+  data_source_type      DataSourceType       @default(FILE_UPLOAD)
+  data_source_config    Json?
+  active_template_id    String?
+  summary_schedule_day  Int                  @default(1)
+  summary_schedule_hour Int                  @default(8)
+  summary_timezone      String               @default("Europe/Warsaw")
+  summary_email_language SummaryEmailLanguage @default(PL)
+  summary_enabled       Boolean              @default(false)
+  next_summary_at       DateTime?
+  created_at            DateTime       @default(now())
+  templates             Template[]
+  summaryLogs           SummaryLog[]
 
   // Relacja do aktywnego szablonu
   activeTemplate Template? @relation("ActiveTemplate", fields: [active_template_id], references: [id])
+}
+
+model SummaryLog {
+  id            String           @id @default(uuid())
+  user_id       String
+  period        String
+  status        SummaryLogStatus
+  error_message String?
+  sent_at       DateTime         @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, period])
+  @@index([user_id])
 }
 
 model Template {

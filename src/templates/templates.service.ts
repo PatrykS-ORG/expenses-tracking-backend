@@ -20,6 +20,7 @@ import { EmailService } from '../email/email.service';
 import {
   applyTemplateValues,
   getExampleTemplateValues,
+  getExampleTestEmailSubject,
 } from '../email/template-renderer';
 import { DataSourceTypeEnum } from './models/data-source-type.enum';
 import { MAX_TEMPLATES_PER_USER } from './templates.constants';
@@ -295,9 +296,15 @@ export class TemplatesService {
       );
     }
 
-    const values = getExampleTemplateValues(user.email);
+    const values = getExampleTemplateValues(
+      user.email,
+      user.summary_email_language,
+    );
     const html = applyTemplateValues(user.activeTemplate.content, values);
-    const subject = `Test podsumowania — ${values.currentMonth}`;
+    const subject = getExampleTestEmailSubject(
+      user.summary_email_language,
+      values.currentMonth,
+    );
 
     await this.emailService.sendEmail(recipient, subject, html);
 

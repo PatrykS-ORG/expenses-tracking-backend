@@ -6,6 +6,18 @@ import {
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { ReceiptOcrService } from '../receipts/receipt-ocr.service';
+import { ExpenseSummary } from './expense-summary.types';
+import {
+  ExpenseAnalysisResult,
+  ExpenseCategory,
+} from './expense-analysis.types';
+import { buildExpensesListHtml } from '../email/expenses-list.builder';
+import { SummaryEmailLanguage } from '../generated/prisma/client';
+import {
+  getExpensesTotalLabel,
+  getSummaryLanguageInstructions,
+  normalizeSummaryEmailLanguage,
+} from '../summary/summary-email-language.util';
 
 const SYSTEM_PROMPT = `You are an expert HTML email designer and financial assistant.
 Create a personalized monthly expense summary email template in clean, responsive HTML.
@@ -17,21 +29,58 @@ Use these placeholders exactly as written:
 Ensure the design is responsive and looks good on mobile devices.
 The output MUST be only raw HTML code starting with <!DOCTYPE html>.`;
 
-const EXPENSE_ANALYSIS_PROMPT = `You are a financial assistant that summarizes monthly expenses.
+const EXPENSE_ANALYSIS_PROMPT = `You are a financial assistant that summarizes monthly expenses for a personalized email report.
+
 Analyze the raw expense text and return strictly valid JSON with these keys:
 - userName (string)
-- currentMonth (string)
-- salaryAmount (string)
-- totalExpenses (string)
-- savingsAmount (string)
-- savingsMessage (string)
-- expensesList (string, HTML list items only, e.g. "<li>Food: 120 PLN</li>")
+- currentMonth (string, localized month + year in the requested output language)
+- salaryAmount (string, formatted amount with currency; use "0 zł" / "0 PLN" if missing)
+- totalExpenses (string, formatted amount — must equal the sum of all category totals)
+- savingsAmount (string, salary minus total expenses when salary exists)
+- savingsMessage (string, 1-3 sentences in the requested output language)
+- categories (array of category objects)
 
-Rules:
-1) Always return JSON only (no markdown, no commentary).
-2) If salary is missing, infer savings against 0 and explain briefly in savingsMessage.
-3) Keep currency exactly as found when possible, otherwise use PLN.
-4) expensesList must contain at least 3 <li> items when enough data exists.`;
+Each category object must contain:
+- name (string, parent category label in the requested output language)
+- total (string, formatted sum for the whole category)
+- items (array of { name, amount } subcategory rows that belong under this category)
+
+Categorization rules (critical):
+1) NEVER output one row per raw merchant/product line in the final structure.
+2) Group related expenses into 3-8 meaningful parent categories.
+3) Put individual expenses under items[] as subcategories (group related lines under readable subcategory names).
+4) Each category.items must contain at least 1 subcategory; subcategory amounts must sum to category.total.
+5) Prefer human-readable budget categories over literal copy-paste of source lines.
+
+Formatting rules:
+1) Return JSON only — no markdown, no HTML, no commentary.
+2) Use ONLY the output language specified in the user message for all text fields — ignore the language of raw expense lines.
+3) Detect salary/wypłata from the file when present; otherwise explain in savingsMessage that savings are vs 0.
+
+Example shape:
+{
+  "userName": "Anna",
+  "currentMonth": "maj 2026",
+  "salaryAmount": "6 500,00 zł",
+  "totalExpenses": "2 126,50 zł",
+  "savingsAmount": "4 373,50 zł",
+  "savingsMessage": "Wypłata wyniosła 6 500,00 zł, wydatki 2 126,50 zł — na koniec miesiąca zostało 4 373,50 zł.",
+  "categories": [
+    {
+      "name": "Żywność i dom",
+      "total": "1 240,00 zł",
+      "items": [
+        { "name": "Zakupy spożywcze", "amount": "890,00 zł" },
+        { "name": "Chemia i drogeria", "amount": "350,00 zł" }
+      ]
+    },
+    {
+      "name": "Transport",
+      "total": "486,50 zł",
+      "items": [{ "name": "Paliwo i komunikacja", "amount": "486,50 zł" }]
+    }
+  ]
+}`;
 
 const RECEIPT_SCAN_PROMPT = `You are a financial assistant that extracts expenses from receipt OCR text.
 Read the OCR text and return ONLY plain text lines in this format:
@@ -43,16 +92,6 @@ Rules:
 3) Keep original currency symbols/codes when visible.
 4) If you cannot read an amount confidently, skip that line.
 5) If no expenses can be extracted, return exactly: NO_EXPENSES_FOUND`;
-
-interface ExpenseSummary {
-  userName: string;
-  currentMonth: string;
-  salaryAmount: string;
-  totalExpenses: string;
-  savingsAmount: string;
-  savingsMessage: string;
-  expensesList: string;
-}
 
 @Injectable()
 export class AiService {
@@ -140,8 +179,14 @@ export class AiService {
     }
   }
 
-  async analyzeExpenses(rawExpenseContent: string): Promise<ExpenseSummary> {
+  async analyzeExpenses(
+    rawExpenseContent: string,
+    language: SummaryEmailLanguage = SummaryEmailLanguage.PL,
+  ): Promise<ExpenseSummary> {
     const openai = this.createClient();
+    const resolvedLanguage = normalizeSummaryEmailLanguage(language);
+    const languageInstructions =
+      getSummaryLanguageInstructions(resolvedLanguage);
 
     try {
       const response = await openai.chat.completions.create({
@@ -150,11 +195,11 @@ export class AiService {
           { role: 'system', content: EXPENSE_ANALYSIS_PROMPT },
           {
             role: 'user',
-            content: `Raw expense file content:\n${rawExpenseContent}`,
+            content: `${languageInstructions}\n\nRaw expense file content:\n${rawExpenseContent}`,
           },
         ],
         temperature: 0.2,
-        max_tokens: 2048,
+        max_tokens: 8192,
       });
 
       const choice = response.choices[0];
@@ -162,7 +207,10 @@ export class AiService {
         throw new ServiceUnavailableException('AI returned an empty summary');
       }
 
-      const parsed = this.parseExpenseSummary(choice.message.content);
+      const parsed = this.parseExpenseSummary(
+        choice.message.content,
+        resolvedLanguage,
+      );
       if (!parsed) {
         throw new ServiceUnavailableException(
           'AI returned malformed summary JSON',
@@ -263,7 +311,10 @@ export class AiService {
     }
   }
 
-  private parseExpenseSummary(rawContent: string): ExpenseSummary | null {
+  private parseExpenseSummary(
+    rawContent: string,
+    language: SummaryEmailLanguage,
+  ): ExpenseSummary | null {
     const trimmed = rawContent.trim();
     const unwrapped = trimmed.startsWith('```json')
       ? trimmed
@@ -273,22 +324,98 @@ export class AiService {
       : trimmed;
 
     try {
-      const parsed = JSON.parse(unwrapped) as Partial<ExpenseSummary>;
+      const parsed = JSON.parse(unwrapped) as Partial<ExpenseAnalysisResult> & {
+        expensesList?: string;
+      };
+
       if (
         typeof parsed.userName !== 'string' ||
         typeof parsed.currentMonth !== 'string' ||
         typeof parsed.salaryAmount !== 'string' ||
         typeof parsed.totalExpenses !== 'string' ||
         typeof parsed.savingsAmount !== 'string' ||
-        typeof parsed.savingsMessage !== 'string' ||
-        typeof parsed.expensesList !== 'string'
+        typeof parsed.savingsMessage !== 'string'
       ) {
         return null;
       }
 
-      return parsed as ExpenseSummary;
+      const categories = this.normalizeCategories(parsed.categories);
+      if (!categories || categories.length === 0) {
+        return null;
+      }
+
+      const totalLabel = getExpensesTotalLabel(language);
+      const expensesList = buildExpensesListHtml(
+        categories,
+        parsed.totalExpenses,
+        totalLabel,
+      );
+
+      return {
+        userName: parsed.userName,
+        currentMonth: parsed.currentMonth,
+        salaryAmount: parsed.salaryAmount,
+        totalExpenses: parsed.totalExpenses,
+        savingsAmount: parsed.savingsAmount,
+        savingsMessage: parsed.savingsMessage,
+        expensesList,
+      };
     } catch {
       return null;
     }
+  }
+
+  private normalizeCategories(value: unknown): ExpenseCategory[] | null {
+    if (!Array.isArray(value) || value.length === 0) {
+      return null;
+    }
+
+    const categories: ExpenseCategory[] = [];
+
+    for (const entry of value) {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+
+      const category = entry as Partial<ExpenseCategory>;
+      if (
+        typeof category.name !== 'string' ||
+        typeof category.total !== 'string'
+      ) {
+        return null;
+      }
+
+      if (!Array.isArray(category.items) || category.items.length === 0) {
+        return null;
+      }
+
+      const items = category.items.map((item) => {
+        if (
+          !item ||
+          typeof item !== 'object' ||
+          typeof (item as { name?: unknown }).name !== 'string' ||
+          typeof (item as { amount?: unknown }).amount !== 'string'
+        ) {
+          return null;
+        }
+
+        return {
+          name: (item as { name: string }).name.trim(),
+          amount: (item as { amount: string }).amount.trim(),
+        };
+      });
+
+      if (items.some((item) => item === null)) {
+        return null;
+      }
+
+      categories.push({
+        name: category.name.trim(),
+        total: category.total.trim(),
+        items: items as ExpenseCategory['items'],
+      });
+    }
+
+    return categories;
   }
 }

@@ -12,6 +12,8 @@ import { TemplatesModule } from './templates/templates.module';
 import { DataSourcesModule } from './data-sources/data-sources.module';
 import { EmailModule } from './email/email.module';
 import { ReceiptsModule } from './receipts/receipts.module';
+import { CronModule } from './cron/cron.module';
+import { SummaryModule } from './summary/summary.module';
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { ReceiptsModule } from './receipts/receipts.module';
     DataSourcesModule,
     EmailModule,
     ReceiptsModule,
+    SummaryModule,
+    CronModule,
   ],
   providers: [AppService, AppResolver],
 })

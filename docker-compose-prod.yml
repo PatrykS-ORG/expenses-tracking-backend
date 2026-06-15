@@ -26,6 +26,21 @@ services:
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET}
+      CRON_SECRET: ${CRON_SECRET}
+    networks:
+      - homelab_net
+
+  expenses-summary-cron:
+    build:
+      context: .
+      dockerfile: docker/cron/Dockerfile
+    container_name: expenses-summary-cron
+    restart: always
+    environment:
+      CRON_SECRET: ${CRON_SECRET}
+      CRON_TARGET_URL: ${CRON_ENDPOINT_URL}
+    depends_on:
+      - expenses-tracking-api
     networks:
       - homelab_net
 

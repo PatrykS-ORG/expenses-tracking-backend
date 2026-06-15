@@ -59,6 +59,7 @@
 
 - `@nestjs/config`
 - `dotenv`
+- Key env vars include `CRON_SECRET` (webhook auth for `/api/cron/process-summaries`) — see [cron-summaries.md](./cron-summaries.md)
 
 ## Testing and quality
 

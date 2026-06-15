@@ -13,7 +13,7 @@ Implemented integrations:
 
 Planned (not wired yet):
 
-- Monthly cron webhook pipeline (`/api/cron/process-summaries`).
+- ~~Monthly cron webhook pipeline (`/api/cron/process-summaries`).~~ Implemented — see [cron-summaries.md](./cron-summaries.md).
 
 ```mermaid
 flowchart LR
@@ -30,7 +30,8 @@ flowchart LR
     EmailMod[EmailModule]
     AiMod[AiModule]
     ReceiptsMod[ReceiptsModule]
-    OcrMod[ReceiptOcrModule]
+    SummaryMod[SummaryModule]
+    CronMod[CronModule]
     PrismaSvc[PrismaService]
   end
   subgraph supabase [Supabase]
@@ -65,6 +66,10 @@ flowchart LR
   AiMod --> DeepSeek
   OcrMod --> Tesseract
   EmailMod --> Brevo
+  SummaryMod --> AiMod
+  SummaryMod --> EmailMod
+  SummaryMod --> DataSourcesMod
+  CronMod --> SummaryMod
   PrismaSvc --> Postgres
 ```
 
@@ -81,6 +86,8 @@ flowchart LR
 - `DataSourcesModule`
 - `EmailModule`
 - `ReceiptsModule`
+- `SummaryModule`
+- `CronModule`
 
 ### Implemented modules
 
@@ -94,12 +101,19 @@ flowchart LR
 | `DataSourcesModule` | Source providers, upload endpoint, source resolution                         |
 | `EmailModule`       | Brevo email sending                                                          |
 | `ReceiptsModule`    | Receipt scan + `approveReceiptExpenses` GraphQL mutations + OCR              |
+| `SummaryModule`     | Per-user summary schedule GraphQL + batch summary pipeline                   |
+| `CronModule`        | Secured REST webhook for hourly batch processing                             |
+
+### REST endpoints
+
+| Method | Path                          | Auth                 | Notes                                           |
+| ------ | ----------------------------- | -------------------- | ----------------------------------------------- |
+| `POST` | `/api/cron/process-summaries` | `Bearer CRON_SECRET` | Hourly batch trigger for monthly summary emails |
 
 ### Planned modules
 
 | Module        | Responsibility                                  |
 | ------------- | ----------------------------------------------- |
-| `CronModule`  | Batch processing endpoint for monthly summaries |
 | `UsersModule` | Dedicated profile logic beyond on-demand upsert |
 
 ## Authentication flow
@@ -146,6 +160,8 @@ All client-facing operations are exposed through GraphQL at `/graphql`.
 | Mutation | `uploadExpenseFile`           | JWT    | Upload `.txt/.csv` (max 2MB, base64), set source to `FILE_UPLOAD`                  |
 | Mutation | `overwriteCurrentExpenseFile` | JWT    | Overwrite currently configured uploaded file (base64)                              |
 | Mutation | `sendTestEmail`               | JWT    | Render active template with sample values and send via Brevo                       |
+| Query    | `mySummarySchedule`           | JWT    | Read automatic summary schedule settings                                           |
+| Mutation | `updateSummarySchedule`       | JWT    | Update schedule and recalculate `next_summary_at`                                  |
 | Mutation | `scanReceipt`                 | JWT    | Upload receipt image (JPEG/PNG/WEBP, max 2MB, base64); returns `{ extractedText }` |
 | Mutation | `approveReceiptExpenses`      | JWT    | Append edited receipt expense text to the user's uploaded expense file             |
 
@@ -179,7 +195,9 @@ File upload mutations accept `ExpenseFileUploadInput` / `ScanReceiptInput` with 
 - Service layer throws typed Nest exceptions for domain errors.
 - Provider misconfiguration returns `ServiceUnavailableException`.
 - Upload/download storage failures bubble with context-rich messages.
-- Cron fault-tolerance behavior is planned for batch processing.
+- Cron fault-tolerance behavior is implemented in `SummaryService.processDueSummaries()` — per-user try/catch with `SummaryLog` persistence.
+
+See [cron-summaries.md](./cron-summaries.md) for scheduler and webhook details.
 
 ## Security notes
 

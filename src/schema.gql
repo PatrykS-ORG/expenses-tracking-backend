@@ -53,6 +53,7 @@ type Mutation {
   sendTestEmail(input: SendTestEmailInput!): Boolean!
   setActiveTemplate(templateId: String!): Boolean!
   updateDataSource(input: UpdateDataSourceInput!): Boolean!
+  updateSummarySchedule(input: UpdateSummaryScheduleInput!): SummarySchedule!
   updateTemplate(input: UpdateTemplateInput!): Template!
   uploadExpenseFile(input: ExpenseFileUploadInput!): UploadedExpenseFile!
 }
@@ -72,6 +73,7 @@ type Query {
   currentExpenseFile: CurrentExpenseFile!
   health: String!
   myProfile: Profile!
+  mySummarySchedule: SummarySchedule!
   myTemplateSettings: TemplateSettings!
   myTemplates: [Template!]!
 }
@@ -88,6 +90,20 @@ input ScanReceiptInput {
 
 input SendTestEmailInput {
   recipientEmail: String!
+}
+
+enum SummaryEmailLanguage {
+  EN
+  PL
+}
+
+type SummarySchedule {
+  emailLanguage: SummaryEmailLanguage!
+  enabled: Boolean!
+  nextSummaryAt: DateTime
+  scheduleDay: Int!
+  scheduleHour: Int!
+  timezone: String!
 }
 
 type Template {
@@ -108,6 +124,14 @@ type TemplateSettings {
 input UpdateDataSourceInput {
   dataSourceType: DataSourceType!
   nextcloudFilePath: String
+}
+
+input UpdateSummaryScheduleInput {
+  emailLanguage: SummaryEmailLanguage!
+  enabled: Boolean!
+  scheduleDay: Int!
+  scheduleHour: Int!
+  timezone: String!
 }
 
 input UpdateTemplateInput {

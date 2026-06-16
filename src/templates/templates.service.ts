@@ -254,14 +254,9 @@ export class TemplatesService {
     userId: string,
     userEmail?: string,
   ): Promise<FileUploadDataSourceConfig> {
-    await this.ensureUserExists(userId, userEmail);
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { data_source_config: true },
-    });
-
-    const fileUploadConfig = parseFileUploadConfig(
-      user?.data_source_config ?? null,
+    const fileUploadConfig = await this.tryGetFileUploadSourceConfig(
+      userId,
+      userEmail,
     );
     if (!fileUploadConfig) {
       throw new NotFoundException(
@@ -270,6 +265,19 @@ export class TemplatesService {
     }
 
     return fileUploadConfig;
+  }
+
+  async tryGetFileUploadSourceConfig(
+    userId: string,
+    userEmail?: string,
+  ): Promise<FileUploadDataSourceConfig | null> {
+    await this.ensureUserExists(userId, userEmail);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { data_source_config: true },
+    });
+
+    return parseFileUploadConfig(user?.data_source_config ?? null);
   }
 
   async sendTestEmail(

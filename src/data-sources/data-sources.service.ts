@@ -60,17 +60,33 @@ export class DataSourcesService {
     input: ExpenseFileUploadInput,
   ): Promise<UploadedExpenseFile> {
     const file = decodeUploadedFile(input);
-    const uploadedFileConfig =
-      await this.templatesService.getFileUploadSourceConfig(userId, userEmail);
+    const existingConfig =
+      await this.templatesService.tryGetFileUploadSourceConfig(
+        userId,
+        userEmail,
+      );
+
+    if (!existingConfig) {
+      const uploadedFileConfig = await this.storageService.uploadExpenseFile(
+        userId,
+        file,
+      );
+      await this.templatesService.setFileUploadSource(
+        userId,
+        userEmail,
+        uploadedFileConfig,
+      );
+      return this.toUploadedExpenseFile(uploadedFileConfig);
+    }
 
     await this.storageService.overwriteExpenseFile(
-      uploadedFileConfig.bucket,
-      uploadedFileConfig.filePath,
+      existingConfig.bucket,
+      existingConfig.filePath,
       file.buffer,
     );
 
     const updatedConfig = {
-      ...uploadedFileConfig,
+      ...existingConfig,
       uploadedAt: new Date().toISOString(),
     };
     await this.templatesService.setFileUploadSource(

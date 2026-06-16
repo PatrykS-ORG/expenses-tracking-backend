@@ -1,1 +1,1 @@
-0 * * * * /scripts/trigger-summary.sh
+*/2 * * * * /scripts/trigger-summary.sh

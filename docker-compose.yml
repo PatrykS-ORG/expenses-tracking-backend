@@ -7,9 +7,11 @@ services:
       args:
         APP_VERSION: ${TAG:-latest}
     container_name: expenses-api
-    restart: always
+    restart: unless-stopped
     ports:
       - '${PORT:-5173}:${PORT:-5173}'
+    env_file:
+      - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-5173}
@@ -27,24 +29,17 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET}
       CRON_SECRET: ${CRON_SECRET}
-    networks:
-      - homelab_net
 
   expenses-summary-cron:
     build:
       context: .
       dockerfile: docker/cron/Dockerfile
     container_name: expenses-summary-cron
-    restart: always
+    restart: unless-stopped
+    env_file:
+      - .env
     environment:
       CRON_SECRET: ${CRON_SECRET}
       CRON_TARGET_URL: http://expenses-api:${PORT:-5173}/api/cron/process-summaries
     depends_on:
       - expenses-tracking-api
-    networks:
-      - homelab_net
-
-networks:
-  homelab_net:
-    external: true
-    name: homelab_shared_network

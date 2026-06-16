@@ -7,4 +7,4 @@ COPY docker/cron/crontab /etc/crontab
 
 RUN chmod +x /scripts/trigger-summary.sh
 
-CMD ["supercronic", "/etc/crontab"]
+CMD ["/usr/bin/supercronic", "/etc/crontab"]

@@ -11,6 +11,10 @@ if [ -z "${CRON_TARGET_URL:-}" ]; then
   exit 1
 fi
 
-curl -sf -X POST \
+echo "[$(date -Iseconds)] POST ${CRON_TARGET_URL}"
+
+response="$(curl -sf -X POST \
   -H "Authorization: Bearer ${CRON_SECRET}" \
-  "${CRON_TARGET_URL}"
+  "${CRON_TARGET_URL}")"
+
+echo "[$(date -Iseconds)] ${response}"

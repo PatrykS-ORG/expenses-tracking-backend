@@ -20,9 +20,9 @@ flowchart LR
 
 ## REST endpoint
 
-| Method | Path                          | Auth                                  | Response                                                |
-| ------ | ----------------------------- | ------------------------------------- | ------------------------------------------------------- |
-| `POST` | `/api/cron/process-summaries` | `Authorization: Bearer <CRON_SECRET>` | `{ processed, succeeded, failed, skipped, failures[] }` |
+| Method | Path                          | Auth                                  | Response                                                            |
+| ------ | ----------------------------- | ------------------------------------- | ------------------------------------------------------------------- |
+| `POST` | `/api/cron/process-summaries` | `Authorization: Bearer <CRON_SECRET>` | `{ processed, succeeded, failed, skipped, failures[], outcomes[] }` |
 
 Manual trigger example:
 

@@ -54,12 +54,28 @@ export interface SummarySchedulePayload {
   next_summary_at: Date | null;
 }
 
+export type SummaryProcessAction =
+  | 'email_sent'
+  | 'already_sent'
+  | 'failed'
+  | 'skipped';
+
+export interface SummaryProcessOutcome {
+  userId: string;
+  email: string;
+  action: SummaryProcessAction;
+  period?: string;
+  error?: string;
+  reason?: string;
+}
+
 export interface ProcessSummariesResult {
   processed: number;
   succeeded: number;
   failed: number;
   skipped: number;
   failures: Array<{ userId: string; error: string }>;
+  outcomes: SummaryProcessOutcome[];
 }
 
 @Injectable()
@@ -177,49 +193,87 @@ export class SummaryService {
       },
     })) as DueUser[];
 
+    this.logger.log(
+      `Processing due summaries: ${dueUsers.length} user(s) eligible at ${now.toISOString()}`,
+    );
+
     const result: ProcessSummariesResult = {
       processed: 0,
       succeeded: 0,
       failed: 0,
       skipped: 0,
       failures: [],
+      outcomes: [],
     };
 
     for (const user of dueUsers) {
       if (!this.hasValidDataSourceConfig(user)) {
         result.skipped += 1;
+        const outcome: SummaryProcessOutcome = {
+          userId: user.id,
+          email: user.email,
+          action: 'skipped',
+          reason: 'invalid or missing data source config',
+        };
+        result.outcomes.push(outcome);
         this.logger.warn(
-          `Skipping user ${user.id}: invalid or missing data source config`,
+          `Skipping user ${user.id} (${user.email}): ${outcome.reason}`,
         );
         continue;
       }
 
       if (!user.activeTemplate) {
         result.skipped += 1;
+        const outcome: SummaryProcessOutcome = {
+          userId: user.id,
+          email: user.email,
+          action: 'skipped',
+          reason: 'no active template',
+        };
+        result.outcomes.push(outcome);
         continue;
       }
 
       result.processed += 1;
 
       try {
-        await this.processUserSummary(user);
+        const action = await this.processUserSummary(user);
         result.succeeded += 1;
+        result.outcomes.push({
+          userId: user.id,
+          email: user.email,
+          action,
+          period: getSummaryPeriod(normalizeTimezone(user.summary_timezone)),
+        });
       } catch (error) {
         result.failed += 1;
         const message =
           error instanceof Error ? error.message : 'Unknown processing error';
         result.failures.push({ userId: user.id, error: message });
+        result.outcomes.push({
+          userId: user.id,
+          email: user.email,
+          action: 'failed',
+          period: getSummaryPeriod(normalizeTimezone(user.summary_timezone)),
+          error: message,
+        });
         this.logger.error(
-          `Failed to process summary for user ${user.id}: ${message}`,
+          `Failed to process summary for user ${user.id} (${user.email}): ${message}`,
           error instanceof Error ? error.stack : undefined,
         );
       }
     }
 
+    this.logger.log(
+      `Summary batch finished: processed=${result.processed} succeeded=${result.succeeded} failed=${result.failed} skipped=${result.skipped}`,
+    );
+
     return result;
   }
 
-  private async processUserSummary(user: DueUser): Promise<void> {
+  private async processUserSummary(
+    user: DueUser,
+  ): Promise<'email_sent' | 'already_sent'> {
     if (!user.activeTemplate) {
       throw new NotFoundException('Active template not found');
     }
@@ -237,7 +291,10 @@ export class SummaryService {
 
     if (existingLog?.status === SummaryLogStatus.SUCCESS) {
       await this.advanceNextSummaryAt(user.id, user);
-      return;
+      this.logger.log(
+        `Summary for ${user.email} (period ${period}) was already sent; advanced next_summary_at`,
+      );
+      return 'already_sent';
     }
 
     try {
@@ -282,6 +339,10 @@ export class SummaryService {
       });
 
       await this.advanceNextSummaryAt(user.id, user);
+      this.logger.log(
+        `Summary email sent to ${user.email} for period ${period}`,
+      );
+      return 'email_sent';
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unknown processing error';

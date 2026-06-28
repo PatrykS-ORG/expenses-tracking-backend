@@ -21,9 +21,7 @@ export function getSummaryEmailSubject(
 }
 
 export function getExpensesTotalLabel(language: SummaryEmailLanguage): string {
-  return language === SummaryEmailLanguage.EN
-    ? 'Total expenses'
-    : 'Razem wydatki';
+  return language === SummaryEmailLanguage.EN ? 'Total' : 'Razem';
 }
 
 export function getSummaryLanguageInstructions(

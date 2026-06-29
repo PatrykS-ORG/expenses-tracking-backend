@@ -45,80 +45,128 @@ export function getExampleTemplateValues(
   });
 
   if (resolvedLanguage === SummaryEmailLanguage.EN) {
+    const salaryAmount = '8,500.00 PLN';
+    const totalExpenses = '6,230.45 PLN';
+    const savingsAmount = '2,269.55 PLN';
+
     return {
       userName,
       currentMonth,
-      salaryAmount: '6,500.00 PLN',
-      totalExpenses: '2,126.50 PLN',
-      savingsAmount: '4,373.50 PLN',
+      salaryAmount,
+      totalExpenses,
+      savingsAmount,
       savingsMessage:
-        'Salary was 6,500.00 PLN and expenses 2,126.50 PLN — 4,373.50 PLN remained for the month.',
+        'The largest share of your salary went to Bills & subscriptions (22.0%), driven mainly by rent. Your single most expensive item was Rent & utilities at 1,450.00 PLN. For the quickest savings, look at Entertainment (420.00 PLN) — cutting one restaurant visit could free up 200+ PLN next month.',
       expensesList: buildExpensesListHtml(
         [
           {
             name: 'Food & home',
-            total: '1,240.00 PLN',
+            total: '1,450.00 PLN',
             items: [
               { name: 'Groceries', amount: '890.00 PLN' },
               { name: 'Household supplies', amount: '350.00 PLN' },
-            ],
-          },
-          {
-            name: 'Entertainment',
-            total: '300.00 PLN',
-            items: [
-              { name: 'Squash', amount: '50.00 PLN' },
-              { name: 'Bowling', amount: '150.00 PLN' },
-              { name: 'Ballroom dance', amount: '100.00 PLN' },
+              { name: 'Drugstore', amount: '210.00 PLN' },
             ],
           },
           {
             name: 'Transport',
-            total: '586.50 PLN',
-            items: [{ name: 'Fuel & commute', amount: '586.50 PLN' }],
+            total: '986.50 PLN',
+            items: [
+              { name: 'Fuel', amount: '620.00 PLN' },
+              { name: 'Public transport', amount: '186.50 PLN' },
+              { name: 'Parking', amount: '180.00 PLN' },
+            ],
+          },
+          {
+            name: 'Entertainment',
+            total: '420.00 PLN',
+            items: [
+              { name: 'Restaurants & cafes', amount: '220.00 PLN' },
+              { name: 'Sports & hobbies', amount: '200.00 PLN' },
+            ],
+          },
+          {
+            name: 'Bills & subscriptions',
+            total: '1,873.95 PLN',
+            items: [
+              { name: 'Rent & utilities', amount: '1,450.00 PLN' },
+              { name: 'Phone & internet', amount: '223.95 PLN' },
+              { name: 'Streaming services', amount: '200.00 PLN' },
+            ],
+          },
+          {
+            name: 'Health',
+            total: '500.00 PLN',
+            items: [{ name: 'Pharmacy & medical', amount: '500.00 PLN' }],
           },
         ],
-        '2,126.50 PLN',
+        totalExpenses,
         getExpensesTotalLabel(resolvedLanguage),
+        salaryAmount,
+        'en',
       ),
     };
   }
 
+  const salaryAmount = '8 500,00 zł';
+  const totalExpenses = '6 230,45 zł';
+  const savingsAmount = '2 269,55 zł';
+
   return {
     userName,
     currentMonth,
-    salaryAmount: '6 500,00 zł',
-    totalExpenses: '2 126,50 zł',
-    savingsAmount: '4 373,50 zł',
+    salaryAmount,
+    totalExpenses,
+    savingsAmount,
     savingsMessage:
-      'Wypłata wyniosła 6 500,00 zł, wydatki 2 126,50 zł — na koniec miesiąca zostało 4 373,50 zł.',
+      'Największą część wypłaty pochłonęły Rachunki i subskrypcje (22,0%) — tu dominuje czynsz. Najdroższy pojedynczy wydatek to Czynsz i media — 1 450,00 zł. Najszybciej zaoszczędzisz w kategorii Rozrywka (420,00 zł) — rezygnacja z jednej wizyty w restauracji to ponad 200 zł mniej w następnym miesiącu.',
     expensesList: buildExpensesListHtml(
       [
         {
           name: 'Żywność i dom',
-          total: '1 240,00 zł',
+          total: '1 450,00 zł',
           items: [
             { name: 'Zakupy spożywcze', amount: '890,00 zł' },
             { name: 'Chemia i drogeria', amount: '350,00 zł' },
-          ],
-        },
-        {
-          name: 'Rozrywka',
-          total: '300,00 zł',
-          items: [
-            { name: 'Squash', amount: '50,00 zł' },
-            { name: 'Kręgle', amount: '150,00 zł' },
-            { name: 'Taniec towarzyski', amount: '100,00 zł' },
+            { name: 'Artykuły gospodarstwa domowego', amount: '210,00 zł' },
           ],
         },
         {
           name: 'Transport',
-          total: '586,50 zł',
-          items: [{ name: 'Paliwo i komunikacja', amount: '586,50 zł' }],
+          total: '986,50 zł',
+          items: [
+            { name: 'Paliwo', amount: '620,00 zł' },
+            { name: 'Komunikacja miejska', amount: '186,50 zł' },
+            { name: 'Parking', amount: '180,00 zł' },
+          ],
+        },
+        {
+          name: 'Rozrywka',
+          total: '420,00 zł',
+          items: [
+            { name: 'Restauracje i kawiarnie', amount: '220,00 zł' },
+            { name: 'Sport i hobby', amount: '200,00 zł' },
+          ],
+        },
+        {
+          name: 'Rachunki i subskrypcje',
+          total: '1 873,95 zł',
+          items: [
+            { name: 'Czynsz i media', amount: '1 450,00 zł' },
+            { name: 'Telefon i internet', amount: '223,95 zł' },
+            { name: 'Subskrypcje streamingowe', amount: '200,00 zł' },
+          ],
+        },
+        {
+          name: 'Zdrowie',
+          total: '500,00 zł',
+          items: [{ name: 'Apteka i lekarz', amount: '500,00 zł' }],
         },
       ],
-      '2 126,50 zł',
+      totalExpenses,
       getExpensesTotalLabel(resolvedLanguage),
+      salaryAmount,
+      'pl',
     ),
   };
 }

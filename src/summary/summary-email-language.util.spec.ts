@@ -27,11 +27,7 @@ describe('summary-email-language.util', () => {
   });
 
   it('returns localized total label', () => {
-    expect(getExpensesTotalLabel(SummaryEmailLanguage.PL)).toBe(
-      'Razem wydatki',
-    );
-    expect(getExpensesTotalLabel(SummaryEmailLanguage.EN)).toBe(
-      'Total expenses',
-    );
+    expect(getExpensesTotalLabel(SummaryEmailLanguage.PL)).toBe('Razem');
+    expect(getExpensesTotalLabel(SummaryEmailLanguage.EN)).toBe('Total');
   });
 });

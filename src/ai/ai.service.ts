@@ -24,7 +24,7 @@ Create a personalized monthly expense summary email template in clean, responsiv
 Do not wrap your response in markdown blocks like \`\`\`html, just output the raw HTML.
 The HTML should contain placeholders for dynamic data injected later.
 Use these placeholders exactly as written:
-{{ userName }}, {{ currentMonth }}, {{ totalExpenses }}, {{ savingsAmount }}, {{ savingsMessage }}, {{ expensesList }}
+{{ userName }}, {{ currentMonth }}, {{ salaryAmount }}, {{ totalExpenses }}, {{ savingsAmount }}, {{ savingsMessage }}, {{ expensesList }}
 
 Ensure the design is responsive and looks good on mobile devices.
 The output MUST be only raw HTML code starting with <!DOCTYPE html>.`;
@@ -37,7 +37,7 @@ Analyze the raw expense text and return strictly valid JSON with these keys:
 - salaryAmount (string, formatted amount with currency; use "0 zł" / "0 PLN" if missing)
 - totalExpenses (string, formatted amount — must equal the sum of all category totals)
 - savingsAmount (string, salary minus total expenses when salary exists)
-- savingsMessage (string, 1-3 sentences in the requested output language)
+- savingsMessage (string, 3-5 sentences of analytical insight in the requested output language — see savingsMessage rules below)
 - categories (array of category objects)
 
 Each category object must contain:
@@ -52,6 +52,14 @@ Categorization rules (critical):
 4) Each category.items must contain at least 1 subcategory; subcategory amounts must sum to category.total.
 5) Prefer human-readable budget categories over literal copy-paste of source lines.
 
+savingsMessage rules (critical — do NOT just restate numbers):
+1) Name the category that consumed the largest share of salary, with its percentage.
+2) Name the single most expensive item (subcategory) with its amount.
+3) Identify the category where cost reduction is most realistic and give a brief, actionable recommendation.
+4) Optionally compare to typical household benchmarks or mention a positive trend if visible.
+5) Keep the tone friendly and motivating — no lecturing. 3-5 sentences max.
+6) Do NOT simply repeat "salary was X, expenses were Y, Z remained" — the reader already sees those numbers in the email.
+
 Formatting rules:
 1) Return JSON only — no markdown, no HTML, no commentary.
 2) Use ONLY the output language specified in the user message for all text fields — ignore the language of raw expense lines.
@@ -64,7 +72,7 @@ Example shape:
   "salaryAmount": "6 500,00 zł",
   "totalExpenses": "2 126,50 zł",
   "savingsAmount": "4 373,50 zł",
-  "savingsMessage": "Wypłata wyniosła 6 500,00 zł, wydatki 2 126,50 zł — na koniec miesiąca zostało 4 373,50 zł.",
+  "savingsMessage": "Największą część wypłaty pochłonęła kategoria Żywność i dom (19,1%). Najdroższy pojedynczy wydatek to zakupy spożywcze — 890,00 zł. Warto przyjrzeć się kategorii Transport (486,50 zł) — rozważ carpooling lub komunikację miejską, żeby obniżyć tę kwotę w kolejnym miesiącu.",
   "categories": [
     {
       "name": "Żywność i dom",
@@ -345,10 +353,13 @@ export class AiService {
       }
 
       const totalLabel = getExpensesTotalLabel(language);
+      const listLanguage = language === SummaryEmailLanguage.EN ? 'en' : 'pl';
       const expensesList = buildExpensesListHtml(
         categories,
         parsed.totalExpenses,
         totalLabel,
+        parsed.salaryAmount,
+        listLanguage,
       );
 
       return {

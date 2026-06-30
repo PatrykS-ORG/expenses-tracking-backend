@@ -12,6 +12,7 @@ import { CurrentUserGql } from '../auth/current-user.graphql.decorator';
 interface AuthenticatedUser {
   sub?: string;
   id?: string;
+  email?: string;
 }
 
 @Resolver(() => SummarySchedule)
@@ -33,6 +34,7 @@ export class SummaryResolver {
   ): Promise<SummarySchedule> {
     const schedule = await this.summaryService.getSummarySchedule(
       this.extractUserId(user),
+      user.email,
     );
 
     return {
@@ -53,6 +55,7 @@ export class SummaryResolver {
   ): Promise<SummarySchedule> {
     const schedule = await this.summaryService.updateSummarySchedule(
       this.extractUserId(user),
+      user.email,
       input,
     );
 

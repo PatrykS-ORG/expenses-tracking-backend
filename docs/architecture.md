@@ -94,6 +94,7 @@ flowchart LR
 | Module              | Responsibility                                                               |
 | ------------------- | ---------------------------------------------------------------------------- |
 | `AuthModule`        | JWT strategy + guards for REST/GraphQL                                       |
+| `UsersModule`       | Shared authenticated user-profile provisioning (`UserProfileService`)        |
 | `PrismaModule`      | Shared Prisma adapter client                                                 |
 | `AiModule`          | DeepSeek template generation, expense analysis, and receipt extraction       |
 | `ReceiptOcrModule`  | Tesseract worker lifecycle, image preprocessing (Sharp), OCR text extraction |
@@ -110,21 +111,16 @@ flowchart LR
 | ------ | ----------------------------- | -------------------- | ----------------------------------------------- |
 | `POST` | `/api/cron/process-summaries` | `Bearer CRON_SECRET` | Hourly batch trigger for monthly summary emails |
 
-### Planned modules
-
-| Module        | Responsibility                                  |
-| ------------- | ----------------------------------------------- |
-| `UsersModule` | Dedicated profile logic beyond on-demand upsert |
-
 ## Authentication flow
 
-1. Frontend authenticates with Supabase and gets `access_token`.
+1. Frontend authenticates with Supabase (email/password or Google OAuth 2.0) and gets `access_token`.
 2. Frontend calls NestJS with `Authorization: Bearer <token>`.
 3. REST uses `JwtAuthGuard`; GraphQL uses `GqlAuthGuard`. (REST controllers were removed; guards remain available if REST is reintroduced.)
 4. `JwtStrategy` validates token via:
    - Supabase JWKS (`SUPABASE_URL`) for ES256 projects
    - or legacy `SUPABASE_JWT_SECRET` for HS256
 5. Handlers get user via `@CurrentUser()` / `@CurrentUserGql()`.
+6. `UserProfileService.ensureUserProfile` upserts local `User` profile on first authenticated access.
 
 ## Data-source architecture
 

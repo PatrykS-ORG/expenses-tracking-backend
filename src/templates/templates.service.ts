@@ -24,6 +24,7 @@ import {
 } from '../email/template-renderer';
 import { DataSourceTypeEnum } from './models/data-source-type.enum';
 import { MAX_TEMPLATES_PER_USER } from './templates.constants';
+import { UserProfileService } from '../users/user-profile.service';
 
 type TemplateEntity = Awaited<ReturnType<PrismaService['template']['create']>>;
 
@@ -39,9 +40,10 @@ export class TemplatesService {
   private readonly logger = new Logger(TemplatesService.name);
 
   constructor(
-    private prisma: PrismaService,
-    private aiService: AiService,
-    private emailService: EmailService,
+    private readonly prisma: PrismaService,
+    private readonly aiService: AiService,
+    private readonly emailService: EmailService,
+    private readonly userProfileService: UserProfileService,
   ) {}
 
   async findAllByUser(userId: string): Promise<TemplateEntity[]> {
@@ -55,7 +57,7 @@ export class TemplatesService {
     userId: string,
     userEmail?: string,
   ): Promise<TemplateSettingsPayload> {
-    await this.ensureUserExists(userId, userEmail);
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -89,7 +91,7 @@ export class TemplatesService {
       `Generating template for user ${userId} with input: ${JSON.stringify(input)}`,
     );
 
-    await this.ensureUserExists(userId, userEmail);
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
     await this.ensureTemplateLimitNotReached(userId);
 
     const generatedHtml = await this.aiService.generateTemplate(
@@ -122,7 +124,7 @@ export class TemplatesService {
     userEmail: string | undefined,
     input: CreateTemplateInput,
   ): Promise<TemplateEntity> {
-    await this.ensureUserExists(userId, userEmail);
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
     await this.ensureTemplateLimitNotReached(userId);
     const payload = this.validateTemplatePayload(input.name, input.content);
 
@@ -193,7 +195,7 @@ export class TemplatesService {
     dataSourceType: DataSourceType,
     nextcloudFilePath?: string,
   ): Promise<boolean> {
-    await this.ensureUserExists(userId, userEmail);
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
 
     if (dataSourceType === DataSourceType.NEXTCLOUD) {
       const path = nextcloudFilePath?.trim() || '';
@@ -240,7 +242,7 @@ export class TemplatesService {
     userEmail: string | undefined,
     config: FileUploadDataSourceConfig,
   ): Promise<void> {
-    await this.ensureUserExists(userId, userEmail);
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
     await this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -271,7 +273,7 @@ export class TemplatesService {
     userId: string,
     userEmail?: string,
   ): Promise<FileUploadDataSourceConfig | null> {
-    await this.ensureUserExists(userId, userEmail);
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { data_source_config: true },
@@ -285,7 +287,7 @@ export class TemplatesService {
     userEmail: string | undefined,
     recipientEmail: string,
   ): Promise<boolean> {
-    await this.ensureUserExists(userId, userEmail);
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
     const recipient = recipientEmail.trim();
     if (!recipient) {
       throw new BadRequestException('Recipient email cannot be empty');
@@ -359,18 +361,5 @@ export class TemplatesService {
     }
 
     return template;
-  }
-
-  private async ensureUserExists(
-    userId: string,
-    email?: string,
-  ): Promise<void> {
-    const resolvedEmail = email?.trim() || `${userId}@users.expenseai.local`;
-
-    await this.prisma.user.upsert({
-      where: { id: userId },
-      create: { id: userId, email: resolvedEmail },
-      update: email ? { email: resolvedEmail } : {},
-    });
   }
 }

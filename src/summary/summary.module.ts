@@ -4,9 +4,10 @@ import { SummaryResolver } from './summary.resolver';
 import { AiModule } from '../ai/ai.module';
 import { EmailModule } from '../email/email.module';
 import { DataSourcesModule } from '../data-sources/data-sources.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
-  imports: [AiModule, EmailModule, DataSourcesModule],
+  imports: [AiModule, EmailModule, DataSourcesModule, UsersModule],
   providers: [SummaryService, SummaryResolver],
   exports: [SummaryService],
 })

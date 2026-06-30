@@ -32,6 +32,7 @@ import {
   User,
   DataSourceType,
 } from '../generated/prisma/client';
+import { UserProfileService } from '../users/user-profile.service';
 
 type DueUser = User & {
   activeTemplate: { content: string } | null;
@@ -87,9 +88,14 @@ export class SummaryService {
     private readonly aiService: AiService,
     private readonly emailService: EmailService,
     private readonly dataSourceResolver: DataSourceResolverService,
+    private readonly userProfileService: UserProfileService,
   ) {}
 
-  async getSummarySchedule(userId: string): Promise<SummarySchedulePayload> {
+  async getSummarySchedule(
+    userId: string,
+    userEmail?: string,
+  ): Promise<SummarySchedulePayload> {
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -118,8 +124,10 @@ export class SummaryService {
 
   async updateSummarySchedule(
     userId: string,
+    userEmail: string | undefined,
     input: UpdateSummaryScheduleInput,
   ): Promise<SummarySchedulePayload> {
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
     const scheduleDay = clampScheduleDay(input.scheduleDay);
     const scheduleHour = clampScheduleHour(input.scheduleHour);
     const timezone = normalizeTimezone(input.timezone);

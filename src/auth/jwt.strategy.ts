@@ -1,17 +1,19 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { passportJwtSecret } from 'jwks-rsa';
 
 interface SupabaseJwtPayload {
-  sub: string;
+  sub?: string;
   email?: string;
   role?: string;
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
+  private readonly logger = new Logger(JwtStrategy.name);
+
   constructor(private configService: ConfigService) {
     const supabaseUrl = configService
       .get<string>('SUPABASE_URL', '')
@@ -51,6 +53,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: SupabaseJwtPayload) {
-    return { id: payload.sub, email: payload.email, roles: payload.role };
+    const userId = payload.sub?.trim();
+    if (!userId) {
+      this.logger.warn('JWT payload rejected: missing required sub claim');
+      throw new UnauthorizedException('Invalid authentication token payload');
+    }
+
+    const email = payload.email?.trim() || undefined;
+    return { id: userId, email, roles: payload.role };
   }
 }

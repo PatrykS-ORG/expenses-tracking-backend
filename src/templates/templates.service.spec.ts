@@ -6,6 +6,7 @@ import { AiService } from '../ai/ai.service';
 import { GenerateTemplateInput } from './dto/generate-template.input';
 import { EmailService } from '../email/email.service';
 import { MAX_TEMPLATES_PER_USER } from './templates.constants';
+import { UserProfileService } from '../users/user-profile.service';
 
 describe('TemplatesService', () => {
   let service: TemplatesService;
@@ -17,7 +18,6 @@ describe('TemplatesService', () => {
       count: jest.fn(),
     },
     user: {
-      upsert: jest.fn(),
       update: jest.fn(),
     },
   };
@@ -30,6 +30,10 @@ describe('TemplatesService', () => {
     sendEmail: jest.fn(),
   };
 
+  const userProfileServiceMock = {
+    ensureUserProfile: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -39,6 +43,7 @@ describe('TemplatesService', () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: AiService, useValue: aiServiceMock },
         { provide: EmailService, useValue: emailServiceMock },
+        { provide: UserProfileService, useValue: userProfileServiceMock },
       ],
     }).compile();
 
@@ -85,10 +90,7 @@ describe('TemplatesService', () => {
     };
 
     aiServiceMock.generateTemplate.mockResolvedValue(generatedHtml);
-    prismaMock.user.upsert.mockResolvedValue({
-      id: userId,
-      email: 'u@test.com',
-    });
+    userProfileServiceMock.ensureUserProfile.mockResolvedValue(undefined);
     prismaMock.template.count.mockResolvedValue(0);
     prismaMock.template.create.mockResolvedValue(createdTemplate);
     prismaMock.user.update.mockResolvedValue({ id: userId });
@@ -99,11 +101,10 @@ describe('TemplatesService', () => {
       input,
     );
 
-    expect(prismaMock.user.upsert).toHaveBeenCalledWith({
-      where: { id: userId },
-      create: { id: userId, email: 'u@test.com' },
-      update: { email: 'u@test.com' },
-    });
+    expect(userProfileServiceMock.ensureUserProfile).toHaveBeenCalledWith(
+      userId,
+      'u@test.com',
+    );
     expect(aiServiceMock.generateTemplate).toHaveBeenCalledWith(
       input.tone,
       input.detailLevel,
@@ -132,10 +133,7 @@ describe('TemplatesService', () => {
       visualStyle: 'minimalistyczny',
     };
 
-    prismaMock.user.upsert.mockResolvedValue({
-      id: userId,
-      email: 'u@test.com',
-    });
+    userProfileServiceMock.ensureUserProfile.mockResolvedValue(undefined);
     prismaMock.template.count.mockResolvedValue(MAX_TEMPLATES_PER_USER);
 
     await expect(
@@ -149,10 +147,7 @@ describe('TemplatesService', () => {
   it('rejects manual template creation when user reached template limit', async () => {
     const userId = 'user-42';
 
-    prismaMock.user.upsert.mockResolvedValue({
-      id: userId,
-      email: 'u@test.com',
-    });
+    userProfileServiceMock.ensureUserProfile.mockResolvedValue(undefined);
     prismaMock.template.count.mockResolvedValue(MAX_TEMPLATES_PER_USER);
 
     await expect(

@@ -156,7 +156,7 @@ erDiagram
 
 ## Business rules
 
-- Every authenticated user is upserted on-demand in `TemplatesService.ensureUserExists`.
+- Every authenticated user is upserted on-demand in `UserProfileService.ensureUserProfile`.
 - At most one active template per user (`active_template_id`).
 - `updateDataSource` enforces:
   - Nextcloud path required for `NEXTCLOUD`

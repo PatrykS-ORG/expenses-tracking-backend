@@ -34,7 +34,7 @@ const EXPENSE_ANALYSIS_PROMPT = `You are a financial assistant that summarizes m
 Analyze the raw expense text and return strictly valid JSON with these keys:
 - userName (string)
 - currentMonth (string, localized month + year in the requested output language)
-- salaryAmount (string, formatted amount with currency; use "0 zł" / "0 PLN" if missing)
+- salaryAmount (string, formatted amount with the requested output currency; use zero in that currency if missing)
 - totalExpenses (string, formatted amount — must equal the sum of all category totals)
 - savingsAmount (string, salary minus total expenses when salary exists)
 - savingsMessage (string, 3-5 sentences of analytical insight in the requested output language — see savingsMessage rules below)
@@ -190,6 +190,7 @@ export class AiService {
   async analyzeExpenses(
     rawExpenseContent: string,
     language: SummaryEmailLanguage = SummaryEmailLanguage.PL,
+    currency = 'PLN',
   ): Promise<ExpenseSummary> {
     const openai = this.createClient();
     const resolvedLanguage = normalizeSummaryEmailLanguage(language);
@@ -203,7 +204,12 @@ export class AiService {
           { role: 'system', content: EXPENSE_ANALYSIS_PROMPT },
           {
             role: 'user',
-            content: `${languageInstructions}\n\nRaw expense file content:\n${rawExpenseContent}`,
+            content: `${languageInstructions}
+
+Output currency: ${currency}. Format every salary, expense, category, item, total, and savings amount in ${currency}. If source amounts use other currencies, preserve their numeric values and label the final report consistently as ${currency}; do not invent exchange rates.
+
+Raw expense file content:
+${rawExpenseContent}`,
           },
         ],
         temperature: 0.2,

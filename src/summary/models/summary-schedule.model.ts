@@ -18,6 +18,9 @@ export class SummarySchedule {
   @Field(() => SummaryEmailLanguageEnum)
   emailLanguage: SummaryEmailLanguageEnum;
 
+  @Field()
+  currency: string;
+
   @Field(() => Date, { nullable: true })
   nextSummaryAt: Date | null;
 }
@@ -38,4 +41,7 @@ export class UpdateSummaryScheduleInput {
 
   @Field(() => SummaryEmailLanguageEnum)
   emailLanguage: SummaryEmailLanguageEnum;
+
+  @Field()
+  currency: string;
 }

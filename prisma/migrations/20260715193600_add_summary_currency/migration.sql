@@ -1,0 +1,2 @@
+ALTER TABLE "User"
+ADD COLUMN "summary_currency" TEXT NOT NULL DEFAULT 'PLN';

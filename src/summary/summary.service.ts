@@ -44,6 +44,7 @@ export interface UpdateSummaryScheduleInput {
   scheduleHour: number;
   timezone: string;
   emailLanguage: SummaryEmailLanguageEnum;
+  currency: string;
 }
 
 export interface SummarySchedulePayload {
@@ -52,8 +53,19 @@ export interface SummarySchedulePayload {
   schedule_hour: number;
   timezone: string;
   email_language: SummaryEmailLanguage;
+  currency: string;
   next_summary_at: Date | null;
 }
+
+const SUPPORTED_SUMMARY_CURRENCIES = [
+  'PLN',
+  'EUR',
+  'USD',
+  'GBP',
+  'CHF',
+  'CZK',
+  'UAH',
+] as const;
 
 export type SummaryProcessAction =
   | 'email_sent'
@@ -104,6 +116,7 @@ export class SummaryService {
         summary_schedule_hour: true,
         summary_timezone: true,
         summary_email_language: true,
+        summary_currency: true,
         next_summary_at: true,
       },
     });
@@ -118,6 +131,7 @@ export class SummaryService {
       schedule_hour: user.summary_schedule_hour,
       timezone: user.summary_timezone,
       email_language: user.summary_email_language,
+      currency: user.summary_currency,
       next_summary_at: user.next_summary_at,
     };
   }
@@ -132,6 +146,14 @@ export class SummaryService {
     const scheduleHour = clampScheduleHour(input.scheduleHour);
     const timezone = normalizeTimezone(input.timezone);
     const emailLanguage = fromSummaryEmailLanguageEnum(input.emailLanguage);
+    const currency = input.currency.trim().toUpperCase();
+    if (
+      !SUPPORTED_SUMMARY_CURRENCIES.includes(
+        currency as (typeof SUPPORTED_SUMMARY_CURRENCIES)[number],
+      )
+    ) {
+      throw new BadRequestException('Unsupported summary currency');
+    }
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -166,6 +188,7 @@ export class SummaryService {
         summary_schedule_hour: scheduleHour,
         summary_timezone: timezone,
         summary_email_language: emailLanguage,
+        summary_currency: currency,
         next_summary_at: nextSummaryAt,
       },
       select: {
@@ -174,6 +197,7 @@ export class SummaryService {
         summary_schedule_hour: true,
         summary_timezone: true,
         summary_email_language: true,
+        summary_currency: true,
         next_summary_at: true,
       },
     });
@@ -184,8 +208,55 @@ export class SummaryService {
       schedule_hour: updated.summary_schedule_hour,
       timezone: updated.summary_timezone,
       email_language: updated.summary_email_language,
+      currency: updated.summary_currency,
       next_summary_at: updated.next_summary_at,
     };
+  }
+
+  async sendSummaryNow(userId: string, userEmail?: string): Promise<boolean> {
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { activeTemplate: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User profile not found');
+    }
+    this.ensureUserReadyForSummaries(user);
+
+    await this.renderAndSendSummary(user, new Date().toISOString().slice(0, 7));
+    return true;
+  }
+
+  private async renderAndSendSummary(
+    user: DueUser,
+    period: string,
+  ): Promise<void> {
+    if (!user.activeTemplate) {
+      throw new NotFoundException('Active template not found');
+    }
+
+    const rawExpenseContent =
+      await this.dataSourceResolver.fetchExpenseContent(user);
+    if (!rawExpenseContent.trim()) {
+      throw new BadRequestException('Expense file is empty');
+    }
+
+    const summary = await this.aiService.analyzeExpenses(
+      rawExpenseContent,
+      user.summary_email_language,
+      user.summary_currency,
+    );
+    const values = expenseSummaryToTemplateValues(summary, user.email);
+    const html = applyTemplateValues(user.activeTemplate.content, values);
+    const subject = getSummaryEmailSubject(
+      user.summary_email_language,
+      values.currentMonth,
+      period,
+    );
+
+    await this.emailService.sendEmail(user.email, subject, html);
   }
 
   async processDueSummaries(): Promise<ProcessSummariesResult> {
@@ -306,26 +377,7 @@ export class SummaryService {
     }
 
     try {
-      const rawExpenseContent =
-        await this.dataSourceResolver.fetchExpenseContent(user);
-
-      if (!rawExpenseContent.trim()) {
-        throw new Error('Expense file is empty');
-      }
-
-      const summary = await this.aiService.analyzeExpenses(
-        rawExpenseContent,
-        user.summary_email_language,
-      );
-      const values = expenseSummaryToTemplateValues(summary, user.email);
-      const html = applyTemplateValues(user.activeTemplate.content, values);
-      const subject = getSummaryEmailSubject(
-        user.summary_email_language,
-        values.currentMonth,
-        period,
-      );
-
-      await this.emailService.sendEmail(user.email, subject, html);
+      await this.renderAndSendSummary(user, period);
 
       await this.prisma.summaryLog.upsert({
         where: {

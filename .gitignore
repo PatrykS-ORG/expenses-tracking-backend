@@ -3,6 +3,10 @@
 /node_modules
 /build
 
+# Yarn PnP artifacts (this is a pnpm project; these do not belong here)
+.pnp.*
+.yarn/
+
 # Prisma Client (generated on postinstall)
 /src/generated/prisma
 

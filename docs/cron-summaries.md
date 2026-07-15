@@ -36,7 +36,7 @@ curl -X POST "http://localhost:5173/api/cron/process-summaries" \
 For each due user:
 
 1. Resolve expense file through `DataSourceResolverService` (`FILE_UPLOAD` or `NEXTCLOUD`).
-2. Analyze content with `AiService.analyzeExpenses()` using the user's `summary_email_language` (`PL` / `EN`).
+2. Analyze content with `AiService.analyzeExpenses()` using the user's `summary_email_language` (`PL` / `EN`) and `summary_currency`.
 3. Map AI JSON categories to an HTML expense table via `buildExpensesListHtml()`, then inject placeholders into the active template.
 4. Render active HTML template with `applyTemplateValues()`.
 5. Send email to `User.email` through `EmailService`.
@@ -52,14 +52,22 @@ On failure:
 
 Stored on `User`:
 
-| Field                    | Default         | Description                                |
-| ------------------------ | --------------- | ------------------------------------------ |
-| `summary_schedule_day`   | `1`             | Day of month (`1-28`)                      |
-| `summary_schedule_hour`  | `8`             | Hour (`0-23`)                              |
-| `summary_timezone`       | `Europe/Warsaw` | IANA timezone                              |
-| `summary_email_language` | `PL`            | Email output language (`PL` / `EN`)        |
-| `summary_enabled`        | `false`         | Whether batch processing includes the user |
-| `next_summary_at`        | `null`          | Next planned send timestamp (UTC)          |
+| Field                    | Default         | Description                                   |
+| ------------------------ | --------------- | --------------------------------------------- |
+| `summary_schedule_day`   | `1`             | Day of month (`1-28`)                         |
+| `summary_schedule_hour`  | `8`             | Hour (`0-23`)                                 |
+| `summary_timezone`       | `Europe/Warsaw` | IANA timezone                                 |
+| `summary_email_language` | `PL`            | Email output language (`PL` / `EN`)           |
+| `summary_currency`       | `PLN`           | Output currency formatting (no FX conversion) |
+| `summary_enabled`        | `false`         | Whether batch processing includes the user    |
+| `next_summary_at`        | `null`          | Next planned send timestamp (UTC)             |
+
+## Manual current summary
+
+The authenticated `sendSummaryNow` GraphQL mutation runs the same data-source,
+AI analysis, template rendering, and email delivery steps immediately. It sends
+to the account email but does not create a `SummaryLog` or change
+`next_summary_at`.
 
 Users manage these settings through GraphQL:
 

@@ -46,10 +46,12 @@ input GenerateTemplateInput {
 type Mutation {
   approveReceiptExpenses(input: ApproveReceiptExpensesInput!): Boolean!
   createTemplate(input: CreateTemplateInput!): Template!
+  deleteMyAccount: Boolean!
   deleteTemplate(templateId: String!): Boolean!
   generateTemplate(input: GenerateTemplateInput!): Template!
   overwriteCurrentExpenseFile(input: ExpenseFileUploadInput!): UploadedExpenseFile!
   scanReceipt(input: ScanReceiptInput!): ReceiptScanResult!
+  sendSummaryNow: Boolean!
   sendTestEmail(input: SendTestEmailInput!): Boolean!
   setActiveTemplate(templateId: String!): Boolean!
   updateDataSource(input: UpdateDataSourceInput!): Boolean!
@@ -98,6 +100,7 @@ enum SummaryEmailLanguage {
 }
 
 type SummarySchedule {
+  currency: String!
   emailLanguage: SummaryEmailLanguage!
   enabled: Boolean!
   nextSummaryAt: DateTime
@@ -127,6 +130,7 @@ input UpdateDataSourceInput {
 }
 
 input UpdateSummaryScheduleInput {
+  currency: String!
   emailLanguage: SummaryEmailLanguage!
   enabled: Boolean!
   scheduleDay: Int!

@@ -1,6 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { InternalServerErrorException } from '@nestjs/common';
 import { UserProfileService } from './user-profile.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
+
+jest.mock('axios');
 
 describe('UserProfileService', () => {
   let service: UserProfileService;
@@ -8,7 +13,16 @@ describe('UserProfileService', () => {
   const prismaMock = {
     user: {
       upsert: jest.fn(),
+      findUnique: jest.fn(),
+      deleteMany: jest.fn(),
     },
+  };
+  const configMock = {
+    get: jest.fn((key: string) => {
+      if (key === 'SUPABASE_URL') return 'https://project.supabase.co';
+      if (key === 'SUPABASE_SERVICE_ROLE_KEY') return 'service-role-key';
+      return undefined;
+    }),
   };
 
   beforeEach(async () => {
@@ -18,6 +32,7 @@ describe('UserProfileService', () => {
       providers: [
         UserProfileService,
         { provide: PrismaService, useValue: prismaMock },
+        { provide: ConfigService, useValue: configMock },
       ],
     }).compile();
 
@@ -48,5 +63,46 @@ describe('UserProfileService', () => {
       },
       update: { email: 'user@example.com' },
     });
+  });
+
+  it('deletes the auth user and local profile', async () => {
+    const axiosMock = jest.mocked(axios);
+    prismaMock.user.findUnique.mockResolvedValue(null);
+    axiosMock.delete.mockResolvedValue({ status: 200 });
+
+    await expect(service.deleteAccount('user-1')).resolves.toBe(true);
+
+    const [url, config] = axiosMock.delete.mock.calls[0];
+    expect(url).toBe('https://project.supabase.co/auth/v1/admin/users/user-1');
+    expect(config?.headers).toMatchObject({
+      Authorization: 'Bearer service-role-key',
+    });
+    expect(prismaMock.user.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+    });
+  });
+
+  it('treats a missing auth identity as an idempotent success', async () => {
+    const axiosMock = jest.mocked(axios);
+    prismaMock.user.findUnique.mockResolvedValue(null);
+    axiosMock.delete.mockRejectedValue({ response: { status: 404 } });
+
+    await expect(service.deleteAccount('user-1')).resolves.toBe(true);
+
+    expect(prismaMock.user.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+    });
+  });
+
+  it('does not delete the local profile when auth deletion fails', async () => {
+    const axiosMock = jest.mocked(axios);
+    prismaMock.user.findUnique.mockResolvedValue(null);
+    axiosMock.delete.mockRejectedValue({ response: { status: 500 } });
+
+    await expect(service.deleteAccount('user-1')).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    );
+
+    expect(prismaMock.user.deleteMany).not.toHaveBeenCalled();
   });
 });

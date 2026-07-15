@@ -33,6 +33,7 @@ model User {
   summary_schedule_hour Int                  @default(8)
   summary_timezone      String               @default("Europe/Warsaw")
   summary_email_language SummaryEmailLanguage @default(PL)
+  summary_currency      String               @default("PLN")
   summary_enabled       Boolean              @default(false)
   next_summary_at       DateTime?
   created_at            DateTime       @default(now())

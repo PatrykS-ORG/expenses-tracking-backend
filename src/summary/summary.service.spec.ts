@@ -65,6 +65,7 @@ describe('SummaryService', () => {
       summary_schedule_hour: 8,
       summary_timezone: 'Europe/Warsaw',
       summary_email_language: 'PL',
+      summary_currency: 'PLN',
       next_summary_at: null,
     });
 
@@ -85,6 +86,7 @@ describe('SummaryService', () => {
         summary_schedule_hour: true,
         summary_timezone: true,
         summary_email_language: true,
+        summary_currency: true,
         next_summary_at: true,
       },
     });
@@ -94,6 +96,7 @@ describe('SummaryService', () => {
       schedule_hour: 8,
       timezone: 'Europe/Warsaw',
       email_language: 'PL',
+      currency: 'PLN',
       next_summary_at: null,
     });
   });
@@ -105,5 +108,46 @@ describe('SummaryService', () => {
     await expect(
       service.getSummarySchedule('oauth-user-1', 'google.user@example.com'),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('sends a real summary immediately without changing the schedule', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      data_source_type: 'FILE_UPLOAD',
+      data_source_config: { bucket: 'expenses', filePath: 'user-1/file.txt' },
+      active_template_id: 'template-1',
+      activeTemplate: { content: '<p>{{ totalExpenses }}</p>' },
+      summary_email_language: 'EN',
+      summary_currency: 'EUR',
+    });
+    dataSourceResolverMock.fetchExpenseContent.mockResolvedValue(
+      'Salary: 3000 EUR\nGroceries: 100 EUR',
+    );
+    aiServiceMock.analyzeExpenses.mockResolvedValue({
+      userName: 'User',
+      currentMonth: 'July 2026',
+      salaryAmount: '3,000.00 EUR',
+      totalExpenses: '100.00 EUR',
+      savingsAmount: '2,900.00 EUR',
+      savingsMessage: 'A useful summary.',
+      expensesList: '<p>Groceries: 100.00 EUR</p>',
+    });
+
+    await expect(
+      service.sendSummaryNow('user-1', 'user@example.com'),
+    ).resolves.toBe(true);
+
+    expect(aiServiceMock.analyzeExpenses).toHaveBeenCalledWith(
+      'Salary: 3000 EUR\nGroceries: 100 EUR',
+      'EN',
+      'EUR',
+    );
+    expect(emailServiceMock.sendEmail).toHaveBeenCalledWith(
+      'user@example.com',
+      'Expense summary — July 2026',
+      '<p>100.00 EUR</p>',
+    );
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
   });
 });

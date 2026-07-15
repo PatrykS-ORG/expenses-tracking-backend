@@ -1,5 +1,5 @@
 import { Resolver, Query, Mutation, Args } from '@nestjs/graphql';
-import { UseGuards, UnauthorizedException } from '@nestjs/common';
+import { UseGuards } from '@nestjs/common';
 import { SummaryService } from './summary.service';
 import {
   SummarySchedule,
@@ -8,24 +8,14 @@ import {
 import { toSummaryEmailLanguageEnum } from './models/summary-email-language.enum';
 import { GqlAuthGuard } from '../auth/gql-auth.guard';
 import { CurrentUserGql } from '../auth/current-user.graphql.decorator';
-
-interface AuthenticatedUser {
-  sub?: string;
-  id?: string;
-  email?: string;
-}
+import {
+  extractUserId,
+  type AuthenticatedUser,
+} from '../auth/authenticated-user';
 
 @Resolver(() => SummarySchedule)
 export class SummaryResolver {
   constructor(private readonly summaryService: SummaryService) {}
-
-  private extractUserId(user: AuthenticatedUser): string {
-    const userId = user.sub ?? user.id;
-    if (!userId) {
-      throw new UnauthorizedException('Missing authenticated user identifier');
-    }
-    return userId;
-  }
 
   @UseGuards(GqlAuthGuard)
   @Query(() => SummarySchedule)
@@ -33,7 +23,7 @@ export class SummaryResolver {
     @CurrentUserGql() user: AuthenticatedUser,
   ): Promise<SummarySchedule> {
     const schedule = await this.summaryService.getSummarySchedule(
-      this.extractUserId(user),
+      extractUserId(user),
       user.email,
     );
 
@@ -43,6 +33,7 @@ export class SummaryResolver {
       scheduleHour: schedule.schedule_hour,
       timezone: schedule.timezone,
       emailLanguage: toSummaryEmailLanguageEnum(schedule.email_language),
+      currency: schedule.currency,
       nextSummaryAt: schedule.next_summary_at,
     };
   }
@@ -54,7 +45,7 @@ export class SummaryResolver {
     @Args('input') input: UpdateSummaryScheduleInput,
   ): Promise<SummarySchedule> {
     const schedule = await this.summaryService.updateSummarySchedule(
-      this.extractUserId(user),
+      extractUserId(user),
       user.email,
       input,
     );
@@ -65,7 +56,14 @@ export class SummaryResolver {
       scheduleHour: schedule.schedule_hour,
       timezone: schedule.timezone,
       emailLanguage: toSummaryEmailLanguageEnum(schedule.email_language),
+      currency: schedule.currency,
       nextSummaryAt: schedule.next_summary_at,
     };
+  }
+
+  @UseGuards(GqlAuthGuard)
+  @Mutation(() => Boolean)
+  sendSummaryNow(@CurrentUserGql() user: AuthenticatedUser): Promise<boolean> {
+    return this.summaryService.sendSummaryNow(extractUserId(user), user.email);
   }
 }

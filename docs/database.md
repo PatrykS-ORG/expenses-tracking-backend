@@ -23,6 +23,7 @@ Application profile linked to Supabase Auth (`User.id` should match JWT `sub`).
 | `summary_schedule_hour`  | `Int`                  | Hour of day for automatic summary (`0-23`, default `8`)  |
 | `summary_timezone`       | `String`               | IANA timezone (default `Europe/Warsaw`)                  |
 | `summary_email_language` | `SummaryEmailLanguage` | Email output language (`PL` / `EN`, default `PL`)        |
+| `summary_currency`       | `String`               | Report currency (default `PLN`)                          |
 | `summary_enabled`        | `Boolean`              | Whether user receives automatic summaries                |
 | `next_summary_at`        | `DateTime?`            | Next planned send timestamp (UTC)                        |
 | `created_at`             | `DateTime`             | Profile creation timestamp                               |
@@ -123,6 +124,7 @@ erDiagram
     int summary_schedule_day
     int summary_schedule_hour
     string summary_timezone
+    string summary_currency
     boolean summary_enabled
     datetime next_summary_at
     datetime created_at
@@ -153,6 +155,7 @@ erDiagram
 | `20260605133200_add_data_sources`           | Adds `DataSourceType`, `data_source_type`, `data_source_config`; migrates and drops `nextcloud_file_path` |
 | `20260614120000_add_summary_schedule`       | Adds summary schedule fields on `User`, `SummaryLog`, and `SummaryLogStatus` enum                         |
 | `20260614200000_add_summary_email_language` | Adds `summary_email_language` (`PL` / `EN`) on `User`                                                     |
+| `20260715193600_add_summary_currency`       | Adds the preferred summary report currency (default `PLN`)                                                |
 
 ## Business rules
 
@@ -164,6 +167,8 @@ erDiagram
 - Upload endpoint stores file in Storage and persists source config in `User.data_source_config`.
 - `approveReceiptExpenses` appends approved receipt text to the user's existing `FILE_UPLOAD` expense file (creates content if the file is missing) and updates `uploadedAt` in `data_source_config`. Requires `FILE_UPLOAD` as the active data source.
 - Automatic summaries require `summary_enabled = true`, active template, valid data source config, and a computed `next_summary_at`.
+- Report currency is restricted by the API to `PLN`, `EUR`, `USD`, `GBP`, `CHF`, `CZK`, or `UAH`; it controls AI output formatting and does not perform exchange-rate conversion.
+- `deleteMyAccount` removes the Supabase Auth identity, local profile (including cascaded templates and summary logs), and best-effort removes the uploaded expense file.
 
 See [cron-summaries.md](./cron-summaries.md) for batch processing details.
 

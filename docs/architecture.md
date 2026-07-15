@@ -94,7 +94,7 @@ flowchart LR
 | Module              | Responsibility                                                               |
 | ------------------- | ---------------------------------------------------------------------------- |
 | `AuthModule`        | JWT strategy + guards for REST/GraphQL                                       |
-| `UsersModule`       | Shared authenticated user-profile provisioning (`UserProfileService`)        |
+| `UsersModule`       | User-profile provisioning and authenticated account deletion                 |
 | `PrismaModule`      | Shared Prisma adapter client                                                 |
 | `AiModule`          | DeepSeek template generation, expense analysis, and receipt extraction       |
 | `ReceiptOcrModule`  | Tesseract worker lifecycle, image preprocessing (Sharp), OCR text extraction |
@@ -140,26 +140,28 @@ Expense data source is resolved per user from:
 
 All client-facing operations are exposed through GraphQL at `/graphql`.
 
-| Kind     | Name                          | Auth   | Notes                                                                              |
-| -------- | ----------------------------- | ------ | ---------------------------------------------------------------------------------- |
-| Query    | `health`                      | Public | Health/hello smoke check                                                           |
-| Query    | `myProfile`                   | JWT    | Auth smoke test                                                                    |
-| Query    | `myTemplates`                 | JWT    | List current user templates                                                        |
-| Query    | `myTemplateSettings`          | JWT    | Active template + source settings                                                  |
-| Query    | `currentExpenseFile`          | JWT    | Current uploaded file metadata + content                                           |
-| Mutation | `generateTemplate`            | JWT    | Generate template via DeepSeek                                                     |
-| Mutation | `createTemplate`              | JWT    | Create template                                                                    |
-| Mutation | `updateTemplate`              | JWT    | Update template                                                                    |
-| Mutation | `deleteTemplate`              | JWT    | Delete template                                                                    |
-| Mutation | `setActiveTemplate`           | JWT    | Set active template                                                                |
-| Mutation | `updateDataSource`            | JWT    | Switch/update source config                                                        |
-| Mutation | `uploadExpenseFile`           | JWT    | Upload `.txt/.csv` (max 2MB, base64), set source to `FILE_UPLOAD`                  |
-| Mutation | `overwriteCurrentExpenseFile` | JWT    | Overwrite currently configured uploaded file (base64)                              |
-| Mutation | `sendTestEmail`               | JWT    | Render active template with sample values and send via Brevo                       |
-| Query    | `mySummarySchedule`           | JWT    | Read automatic summary schedule settings                                           |
-| Mutation | `updateSummarySchedule`       | JWT    | Update schedule and recalculate `next_summary_at`                                  |
-| Mutation | `scanReceipt`                 | JWT    | Upload receipt image (JPEG/PNG/WEBP, max 2MB, base64); returns `{ extractedText }` |
-| Mutation | `approveReceiptExpenses`      | JWT    | Append edited receipt expense text to the user's uploaded expense file             |
+| Kind     | Name                          | Auth   | Notes                                                                               |
+| -------- | ----------------------------- | ------ | ----------------------------------------------------------------------------------- |
+| Query    | `health`                      | Public | Health/hello smoke check                                                            |
+| Query    | `myProfile`                   | JWT    | Auth smoke test                                                                     |
+| Query    | `myTemplates`                 | JWT    | List current user templates                                                         |
+| Query    | `myTemplateSettings`          | JWT    | Active template + source settings                                                   |
+| Query    | `currentExpenseFile`          | JWT    | Current uploaded file metadata + content                                            |
+| Mutation | `generateTemplate`            | JWT    | Generate template via DeepSeek                                                      |
+| Mutation | `createTemplate`              | JWT    | Create template                                                                     |
+| Mutation | `updateTemplate`              | JWT    | Update template                                                                     |
+| Mutation | `deleteTemplate`              | JWT    | Delete template                                                                     |
+| Mutation | `setActiveTemplate`           | JWT    | Set active template                                                                 |
+| Mutation | `updateDataSource`            | JWT    | Switch/update source config                                                         |
+| Mutation | `uploadExpenseFile`           | JWT    | Upload `.txt/.csv` (max 2MB, base64), set source to `FILE_UPLOAD`                   |
+| Mutation | `overwriteCurrentExpenseFile` | JWT    | Overwrite currently configured uploaded file (base64)                               |
+| Mutation | `sendTestEmail`               | JWT    | Render active template with sample values and send via Brevo                        |
+| Query    | `mySummarySchedule`           | JWT    | Read automatic summary schedule settings                                            |
+| Mutation | `updateSummarySchedule`       | JWT    | Update schedule and recalculate `next_summary_at`                                   |
+| Mutation | `sendSummaryNow`              | JWT    | Analyze the current expense file and email a real summary without changing schedule |
+| Mutation | `deleteMyAccount`             | JWT    | Delete Supabase Auth identity, profile data, and uploaded expense file              |
+| Mutation | `scanReceipt`                 | JWT    | Upload receipt image (JPEG/PNG/WEBP, max 2MB, base64); returns `{ extractedText }`  |
+| Mutation | `approveReceiptExpenses`      | JWT    | Append edited receipt expense text to the user's uploaded expense file              |
 
 File upload mutations accept `ExpenseFileUploadInput` / `ScanReceiptInput` with `fileName`, `mimeType`, and `contentBase64` fields.
 

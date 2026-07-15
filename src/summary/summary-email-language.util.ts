@@ -32,7 +32,7 @@ export function getSummaryLanguageInstructions(
       'Output language: English (EN).',
       'Write ALL text fields in English: currentMonth, category names, subcategory names, savingsMessage.',
       'Use English month names (e.g. "May 2026").',
-      'Format PLN amounts as "1,240.00 PLN" unless another currency is clearly present in the file.',
+      'Use English number formatting for amounts (for example, "1,240.00").',
       'Ignore the language of raw expense lines — always output in English.',
     ].join(' ');
   }
@@ -41,7 +41,7 @@ export function getSummaryLanguageInstructions(
     'Output language: Polish (PL).',
     'Write ALL text fields in Polish: currentMonth, category names, subcategory names, savingsMessage.',
     'Use Polish month names (e.g. "maj 2026").',
-    'Format PLN amounts as "1 240,00 zł" unless another currency is clearly present in the file.',
+    'Use Polish number formatting for amounts (for example, "1 240,00").',
     'Ignore the language of raw expense lines — always output in Polish.',
   ].join(' ');
 }

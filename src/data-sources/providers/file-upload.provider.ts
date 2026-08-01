@@ -23,6 +23,7 @@ export class FileUploadProvider implements DataSourceProvider {
     return this.storageService.readTextFile(
       parsedConfig.bucket,
       parsedConfig.filePath,
+      parsedConfig.uploadedAt,
     );
   }
 }

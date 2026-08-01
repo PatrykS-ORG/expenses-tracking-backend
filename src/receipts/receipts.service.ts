@@ -37,6 +37,7 @@ export class ReceiptsService {
     const currentContent = await this.storageService.readTextFileOrEmpty(
       uploadedFileConfig.bucket,
       uploadedFileConfig.filePath,
+      uploadedFileConfig.uploadedAt,
     );
 
     const updatedContent = this.appendReceiptText(currentContent, trimmedText);

@@ -225,7 +225,8 @@ export class SummaryService {
     }
     this.ensureUserReadyForSummaries(user);
 
-    await this.renderAndSendSummary(user, new Date().toISOString().slice(0, 7));
+    const period = getSummaryPeriod(normalizeTimezone(user.summary_timezone));
+    await this.renderAndSendSummary(user, period);
     return true;
   }
 
@@ -247,6 +248,7 @@ export class SummaryService {
       rawExpenseContent,
       user.summary_email_language,
       user.summary_currency,
+      period,
     );
     const values = expenseSummaryToTemplateValues(summary, user.email);
     const html = applyTemplateValues(user.activeTemplate.content, values);

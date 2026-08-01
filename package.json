@@ -20,6 +20,7 @@
     "start:prod": "node dist/main",
     "lint": "eslint . && pnpm format:check",
     "lint:fix": "eslint . --fix && pnpm format",
+    "migration": "npx prisma migrate dev",
     "prepare": "husky",
     "test": "jest",
     "test:watch": "jest --watch",

@@ -70,12 +70,26 @@ export class SupabaseStorageService {
     );
   }
 
-  async readTextFile(bucket: string, filePath: string): Promise<string> {
-    return this.downloadTextFile(bucket, filePath, { allowMissing: false });
+  async readTextFile(
+    bucket: string,
+    filePath: string,
+    cacheNonce?: string,
+  ): Promise<string> {
+    return this.downloadTextFile(bucket, filePath, {
+      allowMissing: false,
+      cacheNonce,
+    });
   }
 
-  async readTextFileOrEmpty(bucket: string, filePath: string): Promise<string> {
-    return this.downloadTextFile(bucket, filePath, { allowMissing: true });
+  async readTextFileOrEmpty(
+    bucket: string,
+    filePath: string,
+    cacheNonce?: string,
+  ): Promise<string> {
+    return this.downloadTextFile(bucket, filePath, {
+      allowMissing: true,
+      cacheNonce,
+    });
   }
 
   private getStorageCredentials(): StorageCredentials {
@@ -119,14 +133,21 @@ export class SupabaseStorageService {
   private async downloadTextFile(
     bucket: string,
     filePath: string,
-    options: { allowMissing: boolean },
+    options: { allowMissing: boolean; cacheNonce?: string },
   ): Promise<string> {
     const { supabaseUrl, serviceRoleKey } = this.getStorageCredentials();
-    const url = this.buildObjectUrl(supabaseUrl, bucket, filePath);
+    const objectUrl = this.buildObjectUrl(supabaseUrl, bucket, filePath);
+    // Bust CDN/edge cache after overwrites. Prefer the object's uploadedAt;
+    // fall back to Date.now() so fresh reads still bypass a stale entry.
+    const cacheNonce = options.cacheNonce?.trim() || String(Date.now());
+    const url = `${objectUrl}?cacheNonce=${encodeURIComponent(cacheNonce)}`;
 
     try {
       const response = await axios.get<string>(url, {
-        headers: this.getAuthHeaders(serviceRoleKey),
+        headers: {
+          ...this.getAuthHeaders(serviceRoleKey),
+          'Cache-Control': 'no-cache',
+        },
         responseType: 'text',
         validateStatus: () => true,
       });
@@ -181,6 +202,8 @@ export class SupabaseStorageService {
           ...this.getAuthHeaders(serviceRoleKey),
           'Content-Type': contentType,
           'x-upsert': 'true',
+          // Expense files are overwritten often; avoid long-lived CDN/browser caches.
+          cacheControl: '0',
         },
         validateStatus: () => true,
       });

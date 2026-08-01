@@ -33,6 +33,10 @@ alwaysApply: true
 - Read env vars via **`ConfigService`** (`@nestjs/config`), not `process.env` in services.
 - Document new variables in `.env.example`.
 
+## AI / DeepSeek integration
+- Never trust the LLM to compute or return sums, totals, or amounts. Parse/merge raw input deterministically in code (see `src/ai/expense-file.parser.ts`), ask the LLM only for categorization/narrative text (`itemIds`, `savingsMessage`), then reconcile amounts back from the canonical parsed data (`src/ai/expense-analysis.reconciler.ts`).
+- Format money via `src/ai/expense-amount.formatter.ts`, not ad-hoc `toLocaleString` calls, so PL/EN formatting stays consistent.
+
 ## Code style
 - **Prettier**: single quotes, trailing commas.
 - **Comments**: English for code; Polish is acceptable for user-facing API messages matching the product.

@@ -26,6 +26,7 @@ Application profile linked to Supabase Auth (`User.id` should match JWT `sub`).
 | `summary_currency`       | `String`               | Report currency (default `PLN`)                          |
 | `summary_enabled`        | `Boolean`              | Whether user receives automatic summaries                |
 | `next_summary_at`        | `DateTime?`            | Next planned send timestamp (UTC)                        |
+| `ai_credit_limit`        | `Int`                  | Monthly AI credit budget (default `50`)                  |
 | `created_at`             | `DateTime`             | Profile creation timestamp                               |
 
 Relations:
@@ -33,6 +34,7 @@ Relations:
 - `templates` — owned templates
 - `activeTemplate` — selected template (`ActiveTemplate` relation)
 - `summaryLogs` — history of processed summary periods
+- `aiUsageLogs` — AI spend audit entries
 
 ### `SummaryLog`
 
@@ -66,6 +68,27 @@ Relations:
 - `user` — owner (`onDelete: Cascade`)
 - `activeForUsers` — users who selected this template as active
 
+### `AiUsageLog`
+
+Per-call AI spend audit trail (DeepSeek token usage).
+
+| Field               | Type             | Description                                                |
+| ------------------- | ---------------- | ---------------------------------------------------------- |
+| `id`                | `String` PK      | Log id                                                     |
+| `user_id`           | `String` FK      | Owner id                                                   |
+| `action`            | `AiActionType`   | `TEMPLATE_GENERATION` / `EXPENSE_SUMMARY` / `RECEIPT_SCAN` |
+| `trigger`           | `AiUsageTrigger` | `MANUAL` (default) or `SCHEDULED`                          |
+| `model`             | `String`         | Model id used for the call                                 |
+| `prompt_tokens`     | `Int`            | Prompt tokens from DeepSeek `usage`                        |
+| `completion_tokens` | `Int`            | Completion tokens from DeepSeek `usage`                    |
+| `total_tokens`      | `Int`            | Total tokens from DeepSeek `usage`                         |
+| `credits_used`      | `Int`            | `ceil(total_tokens / AI_TOKENS_PER_CREDIT)`                |
+| `success`           | `Boolean`        | Whether the AI call produced usable output                 |
+| `error_message`     | `String?`        | Failure detail when `success = false`                      |
+| `created_at`        | `DateTime`       | Call timestamp                                             |
+
+Index: `(user_id, created_at)`.
+
 ### `DataSourceType` enum
 
 | Value         | Meaning                                          |
@@ -86,6 +109,21 @@ Relations:
 | ----- | --------------------- |
 | `PL`  | Polish summary email  |
 | `EN`  | English summary email |
+
+### `AiActionType` enum
+
+| Value                 | Meaning                            |
+| --------------------- | ---------------------------------- |
+| `TEMPLATE_GENERATION` | AI email template generation       |
+| `EXPENSE_SUMMARY`     | Expense analysis for summary email |
+| `RECEIPT_SCAN`        | Receipt OCR → expense extraction   |
+
+### `AiUsageTrigger` enum
+
+| Value       | Meaning                        |
+| ----------- | ------------------------------ |
+| `MANUAL`    | User-initiated GraphQL action  |
+| `SCHEDULED` | Cron / automatic summary batch |
 
 ## `data_source_config` shapes
 
@@ -115,6 +153,7 @@ erDiagram
   User ||--o{ Template : owns
   User }o--o| Template : activeTemplate
   User ||--o{ SummaryLog : logs
+  User ||--o{ AiUsageLog : aiUsage
   User {
     string id PK
     string email UK
@@ -127,6 +166,7 @@ erDiagram
     string summary_currency
     boolean summary_enabled
     datetime next_summary_at
+    int ai_credit_limit
     datetime created_at
   }
   Template {
@@ -144,6 +184,20 @@ erDiagram
     string error_message
     datetime sent_at
   }
+  AiUsageLog {
+    string id PK
+    string user_id FK
+    string action
+    string trigger
+    string model
+    int prompt_tokens
+    int completion_tokens
+    int total_tokens
+    int credits_used
+    boolean success
+    string error_message
+    datetime created_at
+  }
 ```
 
 ## Migrations
@@ -156,10 +210,11 @@ erDiagram
 | `20260614120000_add_summary_schedule`       | Adds summary schedule fields on `User`, `SummaryLog`, and `SummaryLogStatus` enum                         |
 | `20260614200000_add_summary_email_language` | Adds `summary_email_language` (`PL` / `EN`) on `User`                                                     |
 | `20260715193600_add_summary_currency`       | Adds the preferred summary report currency (default `PLN`)                                                |
+| `20260801120000_add_ai_usage_tracking`      | Adds `ai_credit_limit` on `User`, `AiUsageLog`, `AiActionType`, and `AiUsageTrigger`                      |
 
 ## Business rules
 
-- Every authenticated user is upserted on-demand in `UserProfileService.ensureUserProfile`.
+- Every authenticated user is upserted on-demand in `UserProfileService.ensureUserProfile` (new profiles get `ai_credit_limit` from `AI_MONTHLY_CREDIT_LIMIT`).
 - At most one active template per user (`active_template_id`).
 - `updateDataSource` enforces:
   - Nextcloud path required for `NEXTCLOUD`
@@ -168,7 +223,8 @@ erDiagram
 - `approveReceiptExpenses` appends approved receipt text to the user's existing `FILE_UPLOAD` expense file (creates content if the file is missing) and updates `uploadedAt` in `data_source_config`. Requires `FILE_UPLOAD` as the active data source.
 - Automatic summaries require `summary_enabled = true`, active template, valid data source config, and a computed `next_summary_at`.
 - Report currency is restricted by the API to `PLN`, `EUR`, `USD`, `GBP`, `CHF`, `CZK`, or `UAH`; it controls AI output formatting and does not perform exchange-rate conversion.
-- `deleteMyAccount` removes the Supabase Auth identity, local profile (including cascaded templates and summary logs), and best-effort removes the uploaded expense file.
+- AI spend is capped monthly per user (`User.ai_credit_limit`). Credits = `ceil(total_tokens / AI_TOKENS_PER_CREDIT)`. Manual AI actions fail when the budget is exhausted; cron summaries skip those users.
+- `deleteMyAccount` removes the Supabase Auth identity, local profile (including cascaded templates, summary logs, and AI usage logs), and best-effort removes the uploaded expense file.
 
 See [cron-summaries.md](./cron-summaries.md) for batch processing details.
 

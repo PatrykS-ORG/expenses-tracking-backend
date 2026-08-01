@@ -29,6 +29,7 @@ flowchart LR
     DataSourcesMod[DataSourcesModule]
     EmailMod[EmailModule]
     AiMod[AiModule]
+    AiUsageMod[AiUsageModule]
     ReceiptsMod[ReceiptsModule]
     SummaryMod[SummaryModule]
     CronMod[CronModule]
@@ -62,11 +63,14 @@ flowchart LR
   ReceiptsMod --> AiMod
   ReceiptsMod --> DataSourcesMod
   ReceiptsMod --> TemplatesMod
+  AiMod --> AiUsageMod
   AiMod --> OcrMod
   AiMod --> DeepSeek
+  AiUsageMod --> PrismaSvc
   OcrMod --> Tesseract
   EmailMod --> Brevo
   SummaryMod --> AiMod
+  SummaryMod --> AiUsageMod
   SummaryMod --> EmailMod
   SummaryMod --> DataSourcesMod
   CronMod --> SummaryMod
@@ -81,6 +85,7 @@ flowchart LR
 - `GraphQLModule` (Code First, `src/schema.gql`)
 - `PrismaModule`
 - `AuthModule`
+- `AiUsageModule`
 - `AiModule`
 - `TemplatesModule`
 - `DataSourcesModule`
@@ -96,6 +101,7 @@ flowchart LR
 | `AuthModule`        | JWT strategy + guards for REST/GraphQL                                       |
 | `UsersModule`       | User-profile provisioning and authenticated account deletion                 |
 | `PrismaModule`      | Shared Prisma adapter client                                                 |
+| `AiUsageModule`     | Monthly AI credit limits, usage audit log, GraphQL usage queries             |
 | `AiModule`          | DeepSeek template generation, expense analysis, and receipt extraction       |
 | `ReceiptOcrModule`  | Tesseract worker lifecycle, image preprocessing (Sharp), OCR text extraction |
 | `TemplatesModule`   | Template CRUD + active template + source settings + test-email mutation      |
@@ -162,6 +168,8 @@ All client-facing operations are exposed through GraphQL at `/graphql`.
 | Mutation | `deleteMyAccount`             | JWT    | Delete Supabase Auth identity, profile data, and uploaded expense file              |
 | Mutation | `scanReceipt`                 | JWT    | Upload receipt image (JPEG/PNG/WEBP, max 2MB, base64); returns `{ extractedText }`  |
 | Mutation | `approveReceiptExpenses`      | JWT    | Append edited receipt expense text to the user's uploaded expense file              |
+| Query    | `myAiUsageSummary`            | JWT    | Current-month AI credit limit / used / remaining                                    |
+| Query    | `myAiUsageLog`                | JWT    | Paginated AI spend audit (`limit`, `offset`)                                        |
 
 File upload mutations accept `ExpenseFileUploadInput` / `ScanReceiptInput` with `fileName`, `mimeType`, and `contentBase64` fields.
 
@@ -169,9 +177,10 @@ File upload mutations accept `ExpenseFileUploadInput` / `ScanReceiptInput` with 
 
 `scanReceipt` (`ReceiptsResolver` → `ReceiptsService`):
 
-1. Validates image type and size.
-2. `AiService.extractExpensesFromImage` preprocesses the image (Sharp), runs OCR (`ReceiptOcrService` / Tesseract), then sends OCR text to DeepSeek.
-3. Returns plain-text expense lines (or `NO_EXPENSES_FOUND`).
+1. Ensures the authenticated user profile exists.
+2. Validates image type and size.
+3. `AiService.extractExpensesFromImage` checks the AI credit limit, preprocesses the image (Sharp), runs OCR (`ReceiptOcrService` / Tesseract), then sends OCR text to DeepSeek and records token usage.
+4. Returns plain-text expense lines (or `NO_EXPENSES_FOUND`).
 
 `approveReceiptExpenses` (`ReceiptsResolver` → `ReceiptsService`):
 
@@ -179,6 +188,35 @@ File upload mutations accept `ExpenseFileUploadInput` / `ScanReceiptInput` with 
 2. Reads current file content (empty string if missing).
 3. Appends approved receipt text and overwrites the Storage object.
 4. Updates `uploadedAt` in `data_source_config`.
+
+## Expense analysis flow
+
+`AiService.analyzeExpenses(userId, rawExpenseContent, language, currency, period, trigger)`:
+
+1. `AiUsageService.ensureWithinLimit(userId)` rejects the call when the monthly credit budget is exhausted.
+2. `parseExpenseFile()` (`src/ai/expense-file.parser.ts`) deterministically parses raw expense text into a salary total plus a canonical expense list (duplicate names are merged case/whitespace-insensitively; every amount is stored in cents).
+3. DeepSeek receives only the canonical expense list (`id`, `name`, `amount`) and a computed totals hint. Its JSON response is limited to category names + `itemIds` assignments and a `savingsMessage` — it never computes or returns amounts, totals, or the current month.
+4. Token usage from `response.usage` is written to `AiUsageLog` (success or failure) with action `EXPENSE_SUMMARY` and the caller-supplied trigger (`MANUAL` / `SCHEDULED`).
+5. `reconcileExpenseAnalysis()` (`src/ai/expense-analysis.reconciler.ts`) rebuilds `salaryAmount`, `totalExpenses`, `savingsAmount`, and per-category/item totals purely from the canonical cents. AI-provided `itemIds` are validated against the canonical list; unknown or duplicate IDs are dropped and any unassigned expenses fall into an "Other expenses" category. This guarantees totals stay internally consistent even if the AI miscategorizes something.
+6. `formatMoneyAmount()` (`src/ai/expense-amount.formatter.ts`) formats cents into locale-aware strings (e.g. `1 234,56 zł` for PL, `1,234.56 PLN` for EN).
+7. `currentMonth` is derived from the caller-supplied `period` (`YYYY-MM`) via `formatSummaryMonth()` instead of "now", so cron-generated summaries always label the month they actually cover.
+
+All arithmetic stays deterministic in application code; the LLM is only responsible for categorization and the natural-language `savingsMessage`.
+
+## AI credits and usage audit
+
+Monthly AI spend is tracked in `AiUsageModule` / `AiUsageService`.
+
+- **Unit**: `1 credit = AI_TOKENS_PER_CREDIT` tokens (default `1000`), rounded up via `Math.ceil`.
+- **Limit**: stored per user on `User.ai_credit_limit` (default from `AI_MONTHLY_CREDIT_LIMIT`, default `50`). Applied when the profile is first created.
+- **Period**: UTC calendar month (`periodStart` inclusive → `periodEnd` exclusive).
+- **Actions audited**: `TEMPLATE_GENERATION`, `EXPENSE_SUMMARY`, `RECEIPT_SCAN`.
+- **Triggers**: `MANUAL` (user-initiated GraphQL) or `SCHEDULED` (cron summary batch).
+- **Enforcement**:
+  - Manual AI calls (`generateTemplate`, `scanReceipt`, `sendSummaryNow`) throw `BadRequestException` when `used >= limit`.
+  - Cron batch pre-checks `hasRemainingCredits`; over-limit users are `skipped` with reason `AI credit limit reached` (no DeepSeek call).
+- **Recording**: every DeepSeek completion records `prompt_tokens`, `completion_tokens`, `total_tokens`, computed `credits_used`, success flag, and optional `error_message` — even when downstream content validation fails (tokens were still spent).
+- **API**: `myAiUsageSummary`, `myAiUsageLog(limit, offset)`.
 
 ## Rendering + email flow
 
@@ -200,7 +238,8 @@ See [cron-summaries.md](./cron-summaries.md) for scheduler and webhook details.
 ## Security notes
 
 - Secrets remain server-side (`DEEPSEEK_API_KEY`, `BREVO_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, Nextcloud credentials).
+- Non-secret AI quota knobs (`AI_TOKENS_PER_CREDIT`, `AI_MONTHLY_CREDIT_LIMIT`) are env vars / GitHub environment variables.
 - Frontend only uses Supabase user access token; service role key is never exposed.
 - Prisma adapter strips SSL params from URL and applies explicit TLS option via `DATABASE_SSL_REJECT_UNAUTHORIZED`.
 
-See also [database.md](./database.md) and [conventions.md](./conventions.md).
+See also [database.md](./database.md), [conventions.md](./conventions.md), and [processes/ai-credit-renewal.md](./processes/ai-credit-renewal.md).

@@ -106,6 +106,7 @@ describe('TemplatesService', () => {
       'u@test.com',
     );
     expect(aiServiceMock.generateTemplate).toHaveBeenCalledWith(
+      userId,
       input.tone,
       input.detailLevel,
       input.focus,

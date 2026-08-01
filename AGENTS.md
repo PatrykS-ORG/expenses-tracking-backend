@@ -4,14 +4,14 @@ NestJS 11 API for **ExpenseAI**.
 Current scope includes:
 
 - Supabase JWT auth (GraphQL guards)
-- Prisma persistence (`User`, `Template`)
+- Prisma persistence (`User`, `Template`, `SummaryLog`, `AiUsageLog`)
 - AI template generation and expense analysis (DeepSeek)
+- Monthly AI credit limits + spend audit (`AiUsageModule`)
 - Data-source abstraction (`FILE_UPLOAD` via Supabase Storage, `NEXTCLOUD` via WebDAV)
 - Receipt OCR scan (Tesseract + Sharp) and AI expense extraction (DeepSeek)
 - Receipt expense approval (append to uploaded expense file)
 - Test-email sending through Brevo API
-
-Cron batch processing endpoint is still pending.
+- Monthly summary cron webhook (`/api/cron/process-summaries`)
 
 ## Prerequisites
 
@@ -45,10 +45,14 @@ src/
 ├── auth/                    # JWT strategy, guards, decorators
 ├── prisma/                  # PrismaService + module
 ├── ai/                      # DeepSeek integration
+├── ai-usage/                # AI credit limits + usage audit GraphQL
 ├── templates/               # GraphQL templates + settings + test-email mutation
 ├── data-sources/            # GraphQL upload queries/mutations + source providers
 ├── receipts/                # Receipt scan + approveReceiptExpenses GraphQL mutations + OCR
+├── summary/                 # Summary schedule GraphQL + batch pipeline
+├── cron/                    # Secured REST webhook for hourly summaries
 ├── email/                   # Brevo client + HTML template rendering helper
+├── users/                   # Profile provisioning + account deletion
 ├── schema.gql               # Auto-generated GraphQL schema
 ├── app.resolver.ts          # health + myProfile queries
 ├── app.module.ts
@@ -69,12 +73,14 @@ prisma/
 - Data-source provider pattern in `src/data-sources/providers/` allows new connectors later.
 - Email sending uses Brevo HTTP endpoint (`/smtp/email`) through `EmailService`.
 - Prisma adapter strips SSL URL params and applies explicit TLS option from env.
+- Expense analysis math is deterministic, not AI-generated: `src/ai/expense-file.parser.ts` parses/merges raw expense text into canonical cents, `src/ai/expense-analysis.reconciler.ts` rebuilds totals from that canonical data, and `src/ai/expense-amount.formatter.ts` formats it. DeepSeek only assigns category `itemIds` and writes `savingsMessage` — it never returns amounts, totals, or the month.
+- Every DeepSeek call is credit-gated and audited via `AiUsageService` (`AiUsageLog`). Credits = `ceil(tokens / AI_TOKENS_PER_CREDIT)`. Manual calls error when over limit; cron summaries skip over-limit users.
 
 ## Environment variables (high-level)
 
 - DB/Auth: `DATABASE_URL`, `DIRECT_URL`, `DATABASE_SSL_REJECT_UNAUTHORIZED`, `SUPABASE_URL`, `SUPABASE_JWT_SECRET`
 - Storage: `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`
-- AI: `DEEPSEEK_API_KEY`, `DEEPSEEK_VISION_MODEL`, `RECEIPT_OCR_LANG`
+- AI: `DEEPSEEK_API_KEY`, `DEEPSEEK_VISION_MODEL`, `RECEIPT_OCR_LANG`, `AI_TOKENS_PER_CREDIT`, `AI_MONTHLY_CREDIT_LIMIT`
 - Email: `BREVO_API_KEY`, `MAIL_SENDER`, `MAIL_SENDER_NAME`, `BREVO_BASE_URL`
 - Nextcloud: `NEXTCLOUD_WEBDAV_URL`, `NEXTCLOUD_USERNAME`, `NEXTCLOUD_PASSWORD`
 
@@ -85,4 +91,4 @@ prisma/
 - Use `Authorization: Bearer <supabase_access_token>` for protected endpoints.
 - Keep secrets server-side only (never expose service role key to frontend).
 
-See `docs/architecture.md`, `docs/database.md`, and `docs/conventions.md` for full details.
+See `docs/architecture.md`, `docs/database.md`, `docs/conventions.md`, and `docs/processes/ai-credit-renewal.md` for full details.

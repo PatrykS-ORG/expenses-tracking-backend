@@ -46,6 +46,7 @@ export class DataSourcesService {
     const content = await this.storageService.readTextFile(
       uploadedFileConfig.bucket,
       uploadedFileConfig.filePath,
+      uploadedFileConfig.uploadedAt,
     );
 
     return {

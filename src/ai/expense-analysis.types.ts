@@ -11,7 +11,6 @@ export interface ExpenseCategory {
 
 export interface ExpenseAnalysisResult {
   userName: string;
-  currentMonth: string;
   salaryAmount: string;
   totalExpenses: string;
   savingsAmount: string;

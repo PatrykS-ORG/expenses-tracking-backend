@@ -69,6 +69,7 @@ prisma/
 - Data-source provider pattern in `src/data-sources/providers/` allows new connectors later.
 - Email sending uses Brevo HTTP endpoint (`/smtp/email`) through `EmailService`.
 - Prisma adapter strips SSL URL params and applies explicit TLS option from env.
+- Expense analysis math is deterministic, not AI-generated: `src/ai/expense-file.parser.ts` parses/merges raw expense text into canonical cents, `src/ai/expense-analysis.reconciler.ts` rebuilds totals from that canonical data, and `src/ai/expense-amount.formatter.ts` formats it. DeepSeek only assigns category `itemIds` and writes `savingsMessage` — it never returns amounts, totals, or the month.
 
 ## Environment variables (high-level)
 

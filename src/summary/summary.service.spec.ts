@@ -120,6 +120,7 @@ describe('SummaryService', () => {
       activeTemplate: { content: '<p>{{ totalExpenses }}</p>' },
       summary_email_language: 'EN',
       summary_currency: 'EUR',
+      summary_timezone: 'Europe/Warsaw',
     });
     dataSourceResolverMock.fetchExpenseContent.mockResolvedValue(
       'Salary: 3000 EUR\nGroceries: 100 EUR',
@@ -142,6 +143,7 @@ describe('SummaryService', () => {
       'Salary: 3000 EUR\nGroceries: 100 EUR',
       'EN',
       'EUR',
+      '2026-07',
     );
     expect(emailServiceMock.sendEmail).toHaveBeenCalledWith(
       'user@example.com',

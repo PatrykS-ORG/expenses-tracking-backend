@@ -1,9 +1,11 @@
 import { buildExpensesListHtml } from './expenses-list.builder';
 import { SummaryEmailLanguage } from '../generated/prisma/client';
 import {
+  formatSummaryMonth,
   getExpensesTotalLabel,
   normalizeSummaryEmailLanguage,
 } from '../summary/summary-email-language.util';
+import { getSummaryPeriod } from '../summary/summary-schedule.util';
 
 export interface TemplateRenderValues {
   userName: string;
@@ -36,13 +38,10 @@ export function getExampleTemplateValues(
 ): TemplateRenderValues {
   const resolvedLanguage = normalizeSummaryEmailLanguage(language);
   const userName = (userEmail || 'Użytkowniku').split('@')[0] || 'Użytkowniku';
-  const now = new Date();
-  const locale =
-    resolvedLanguage === SummaryEmailLanguage.EN ? 'en-US' : 'pl-PL';
-  const currentMonth = now.toLocaleString(locale, {
-    month: 'long',
-    year: 'numeric',
-  });
+  const currentMonth = formatSummaryMonth(
+    resolvedLanguage,
+    getSummaryPeriod('Europe/Warsaw'),
+  );
 
   if (resolvedLanguage === SummaryEmailLanguage.EN) {
     const salaryAmount = '8,500.00 PLN';

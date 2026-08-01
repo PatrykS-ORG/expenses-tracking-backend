@@ -1,6 +1,7 @@
 import {
   Injectable,
   Logger,
+  BadRequestException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -8,12 +9,15 @@ import OpenAI from 'openai';
 import { ReceiptOcrService } from '../receipts/receipt-ocr.service';
 import { ExpenseSummary } from './expense-summary.types';
 import {
-  ExpenseAnalysisResult,
-  ExpenseCategory,
-} from './expense-analysis.types';
+  AiCategoryAssignment,
+  reconcileExpenseAnalysis,
+} from './expense-analysis.reconciler';
+import { formatMoneyAmount } from './expense-amount.formatter';
+import { CanonicalExpense, parseExpenseFile } from './expense-file.parser';
 import { buildExpensesListHtml } from '../email/expenses-list.builder';
 import { SummaryEmailLanguage } from '../generated/prisma/client';
 import {
+  formatSummaryMonth,
   getExpensesTotalLabel,
   getSummaryLanguageInstructions,
   normalizeSummaryEmailLanguage,
@@ -29,64 +33,51 @@ Use these placeholders exactly as written:
 Ensure the design is responsive and looks good on mobile devices.
 The output MUST be only raw HTML code starting with <!DOCTYPE html>.`;
 
-const EXPENSE_ANALYSIS_PROMPT = `You are a financial assistant that summarizes monthly expenses for a personalized email report.
+const EXPENSE_ANALYSIS_PROMPT = `You are a financial assistant that categorizes monthly expenses for a personalized email report.
 
-Analyze the raw expense text and return strictly valid JSON with these keys:
+The application has ALREADY parsed, merged duplicate names, and calculated every amount.
+Your job is ONLY to:
+1) Assign each canonical expense ID to a parent category
+2) Write a short analytical savingsMessage
+3) Suggest a display userName when possible
+
+Return strictly valid JSON with these keys:
 - userName (string)
-- currentMonth (string, localized month + year in the requested output language)
-- salaryAmount (string, formatted amount with the requested output currency; use zero in that currency if missing)
-- totalExpenses (string, formatted amount — must equal the sum of all category totals)
-- savingsAmount (string, salary minus total expenses when salary exists)
-- savingsMessage (string, 3-5 sentences of analytical insight in the requested output language — see savingsMessage rules below)
+- savingsMessage (string, 3-5 sentences in the requested output language)
 - categories (array of category objects)
+
+Do NOT include currentMonth, salaryAmount, totalExpenses, savingsAmount, item amounts, or item names — the application computes and injects those.
 
 Each category object must contain:
 - name (string, parent category label in the requested output language)
-- total (string, formatted sum for the whole category)
-- items (array of { name, amount } subcategory rows that belong under this category)
+- itemIds (array of integers — IDs from the provided canonical expense list)
 
 Categorization rules (critical):
-1) NEVER output one row per raw merchant/product line in the final structure.
-2) Group related expenses into 3-8 meaningful parent categories.
-3) Put individual expenses under items[] as subcategories (group related lines under readable subcategory names).
-4) Each category.items must contain at least 1 subcategory; subcategory amounts must sum to category.total.
-5) Prefer human-readable budget categories over literal copy-paste of source lines.
+1) Group expenses into 3-8 meaningful parent categories (for example Food, Transport, Bills).
+2) Every expense ID from the canonical list MUST appear in exactly one category.itemIds.
+3) Do not invent IDs. Do not omit IDs. Do not duplicate IDs across categories.
+4) Do not invent expenses that are not in the canonical list.
+5) Each category.itemIds must contain at least 1 ID.
 
-savingsMessage rules (critical — do NOT just restate numbers):
-1) Name the category that consumed the largest share of salary, with its percentage.
-2) Name the single most expensive item (subcategory) with its amount.
+savingsMessage rules (critical — do NOT just restate totals):
+1) Name the category that consumed the largest share of salary, with its percentage (use the provided totals).
+2) Name the single most expensive individual expense with its exact amount from the canonical list.
 3) Identify the category where cost reduction is most realistic and give a brief, actionable recommendation.
-4) Optionally compare to typical household benchmarks or mention a positive trend if visible.
+4) Optionally mention a positive trend if visible.
 5) Keep the tone friendly and motivating — no lecturing. 3-5 sentences max.
-6) Do NOT simply repeat "salary was X, expenses were Y, Z remained" — the reader already sees those numbers in the email.
+6) Use ONLY amounts provided in the user message — never invent or round them.
 
 Formatting rules:
 1) Return JSON only — no markdown, no HTML, no commentary.
-2) Use ONLY the output language specified in the user message for all text fields — ignore the language of raw expense lines.
-3) Detect salary/wypłata from the file when present; otherwise explain in savingsMessage that savings are vs 0.
+2) Use ONLY the output language specified in the user message for category names and savingsMessage.
 
 Example shape:
 {
   "userName": "Anna",
-  "currentMonth": "maj 2026",
-  "salaryAmount": "6 500,00 zł",
-  "totalExpenses": "2 126,50 zł",
-  "savingsAmount": "4 373,50 zł",
-  "savingsMessage": "Największą część wypłaty pochłonęła kategoria Żywność i dom (19,1%). Najdroższy pojedynczy wydatek to zakupy spożywcze — 890,00 zł. Warto przyjrzeć się kategorii Transport (486,50 zł) — rozważ carpooling lub komunikację miejską, żeby obniżyć tę kwotę w kolejnym miesiącu.",
+  "savingsMessage": "Największą część wypłaty pochłonęła kategoria Żywność i dom (14,6%). Najdroższy pojedynczy wydatek to Biedronka — zakupy spożywcze — 890,00 zł. Warto przyjrzeć się kategorii Transport — rozważ carpooling lub komunikację miejską w kolejnym miesiącu.",
   "categories": [
-    {
-      "name": "Żywność i dom",
-      "total": "1 240,00 zł",
-      "items": [
-        { "name": "Zakupy spożywcze", "amount": "890,00 zł" },
-        { "name": "Chemia i drogeria", "amount": "350,00 zł" }
-      ]
-    },
-    {
-      "name": "Transport",
-      "total": "486,50 zł",
-      "items": [{ "name": "Paliwo i komunikacja", "amount": "486,50 zł" }]
-    }
+    { "name": "Żywność i dom", "itemIds": [1, 2, 3] },
+    { "name": "Transport", "itemIds": [4, 5] }
   ]
 }`;
 
@@ -191,11 +182,32 @@ export class AiService {
     rawExpenseContent: string,
     language: SummaryEmailLanguage = SummaryEmailLanguage.PL,
     currency = 'PLN',
+    period?: string,
   ): Promise<ExpenseSummary> {
-    const openai = this.createClient();
     const resolvedLanguage = normalizeSummaryEmailLanguage(language);
+    const parsedFile = parseExpenseFile(rawExpenseContent);
+
+    if (parsedFile.expenses.length === 0) {
+      throw new BadRequestException(
+        'No expenses could be parsed from the expense file',
+      );
+    }
+
+    const openai = this.createClient();
     const languageInstructions =
       getSummaryLanguageInstructions(resolvedLanguage);
+    const totalsHint = this.buildTotalsHint(
+      parsedFile.expenses,
+      parsedFile.salaryCents,
+      resolvedLanguage,
+      currency,
+    );
+    const canonicalList = parsedFile.expenses
+      .map(
+        (expense) =>
+          `${expense.id}. ${expense.name} — ${formatMoneyAmount(expense.amountCents, resolvedLanguage, currency)}`,
+      )
+      .join('\n');
 
     try {
       const response = await openai.chat.completions.create({
@@ -206,10 +218,10 @@ export class AiService {
             role: 'user',
             content: `${languageInstructions}
 
-Output currency: ${currency}. Format every salary, expense, category, item, total, and savings amount in ${currency}. If source amounts use other currencies, preserve their numeric values and label the final report consistently as ${currency}; do not invent exchange rates.
+${totalsHint}
 
-Raw expense file content:
-${rawExpenseContent}`,
+Canonical expenses (assign every ID exactly once):
+${canonicalList}`,
           },
         ],
         temperature: 0.2,
@@ -221,19 +233,51 @@ ${rawExpenseContent}`,
         throw new ServiceUnavailableException('AI returned an empty summary');
       }
 
-      const parsed = this.parseExpenseSummary(
-        choice.message.content,
-        resolvedLanguage,
-      );
-      if (!parsed) {
+      const aiResult = this.parseAiCategorization(choice.message.content);
+      if (!aiResult) {
         throw new ServiceUnavailableException(
           'AI returned malformed summary JSON',
         );
       }
 
-      return parsed;
+      const reconciled = reconcileExpenseAnalysis(
+        parsedFile.expenses,
+        aiResult.categories,
+        parsedFile.salaryCents,
+        resolvedLanguage,
+        currency,
+      );
+
+      if (reconciled.categories.length === 0) {
+        throw new ServiceUnavailableException(
+          'AI returned no usable expense categories',
+        );
+      }
+
+      const totalLabel = getExpensesTotalLabel(resolvedLanguage);
+      const listLanguage =
+        resolvedLanguage === SummaryEmailLanguage.EN ? 'en' : 'pl';
+
+      return {
+        userName: aiResult.userName,
+        currentMonth: formatSummaryMonth(resolvedLanguage, period ?? ''),
+        salaryAmount: reconciled.salaryAmount,
+        totalExpenses: reconciled.totalExpenses,
+        savingsAmount: reconciled.savingsAmount,
+        savingsMessage: aiResult.savingsMessage,
+        expensesList: buildExpensesListHtml(
+          reconciled.categories,
+          reconciled.totalExpenses,
+          totalLabel,
+          reconciled.salaryAmount,
+          listLanguage,
+        ),
+      };
     } catch (error) {
-      if (error instanceof ServiceUnavailableException) {
+      if (
+        error instanceof ServiceUnavailableException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 
@@ -325,10 +369,39 @@ ${rawExpenseContent}`,
     }
   }
 
-  private parseExpenseSummary(
-    rawContent: string,
+  private buildTotalsHint(
+    expenses: CanonicalExpense[],
+    salaryCents: number,
     language: SummaryEmailLanguage,
-  ): ExpenseSummary | null {
+    currency: string,
+  ): string {
+    const totalExpensesCents = expenses.reduce(
+      (sum, expense) => sum + expense.amountCents,
+      0,
+    );
+    const savingsCents = salaryCents - totalExpensesCents;
+    const largest = [...expenses].sort(
+      (a, b) => b.amountCents - a.amountCents,
+    )[0];
+
+    return [
+      `Computed totals (authoritative — use these exact figures in savingsMessage):`,
+      `- salaryAmount: ${formatMoneyAmount(salaryCents, language, currency)}`,
+      `- totalExpenses: ${formatMoneyAmount(totalExpensesCents, language, currency)}`,
+      `- savingsAmount (salary - expenses, may be negative): ${formatMoneyAmount(savingsCents, language, currency)}`,
+      largest
+        ? `- largest single expense: ${largest.name} — ${formatMoneyAmount(largest.amountCents, language, currency)}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  private parseAiCategorization(rawContent: string): {
+    userName: string;
+    savingsMessage: string;
+    categories: AiCategoryAssignment[];
+  } | null {
     const trimmed = rawContent.trim();
     const unwrapped = trimmed.startsWith('```json')
       ? trimmed
@@ -338,98 +411,72 @@ ${rawExpenseContent}`,
       : trimmed;
 
     try {
-      const parsed = JSON.parse(unwrapped) as Partial<ExpenseAnalysisResult> & {
-        expensesList?: string;
+      const parsed = JSON.parse(unwrapped) as {
+        userName?: unknown;
+        savingsMessage?: unknown;
+        categories?: unknown;
       };
 
       if (
         typeof parsed.userName !== 'string' ||
-        typeof parsed.currentMonth !== 'string' ||
-        typeof parsed.salaryAmount !== 'string' ||
-        typeof parsed.totalExpenses !== 'string' ||
-        typeof parsed.savingsAmount !== 'string' ||
         typeof parsed.savingsMessage !== 'string'
       ) {
         return null;
       }
 
-      const categories = this.normalizeCategories(parsed.categories);
+      const categories = this.normalizeCategoryAssignments(parsed.categories);
       if (!categories || categories.length === 0) {
         return null;
       }
 
-      const totalLabel = getExpensesTotalLabel(language);
-      const listLanguage = language === SummaryEmailLanguage.EN ? 'en' : 'pl';
-      const expensesList = buildExpensesListHtml(
-        categories,
-        parsed.totalExpenses,
-        totalLabel,
-        parsed.salaryAmount,
-        listLanguage,
-      );
-
       return {
-        userName: parsed.userName,
-        currentMonth: parsed.currentMonth,
-        salaryAmount: parsed.salaryAmount,
-        totalExpenses: parsed.totalExpenses,
-        savingsAmount: parsed.savingsAmount,
-        savingsMessage: parsed.savingsMessage,
-        expensesList,
+        userName: parsed.userName.trim() || 'Użytkownik',
+        savingsMessage: parsed.savingsMessage.trim(),
+        categories,
       };
     } catch {
       return null;
     }
   }
 
-  private normalizeCategories(value: unknown): ExpenseCategory[] | null {
+  private normalizeCategoryAssignments(
+    value: unknown,
+  ): AiCategoryAssignment[] | null {
     if (!Array.isArray(value) || value.length === 0) {
       return null;
     }
 
-    const categories: ExpenseCategory[] = [];
+    const categories: AiCategoryAssignment[] = [];
 
     for (const entry of value) {
       if (!entry || typeof entry !== 'object') {
         return null;
       }
 
-      const category = entry as Partial<ExpenseCategory>;
-      if (
-        typeof category.name !== 'string' ||
-        typeof category.total !== 'string'
-      ) {
+      const category = entry as {
+        name?: unknown;
+        itemIds?: unknown;
+      };
+
+      if (typeof category.name !== 'string' || !category.name.trim()) {
         return null;
       }
 
-      if (!Array.isArray(category.items) || category.items.length === 0) {
+      if (!Array.isArray(category.itemIds) || category.itemIds.length === 0) {
         return null;
       }
 
-      const items = category.items.map((item) => {
-        if (
-          !item ||
-          typeof item !== 'object' ||
-          typeof (item as { name?: unknown }).name !== 'string' ||
-          typeof (item as { amount?: unknown }).amount !== 'string'
-        ) {
-          return null;
-        }
+      const itemIds = category.itemIds.filter(
+        (id): id is number => typeof id === 'number' && Number.isInteger(id),
+      );
 
-        return {
-          name: (item as { name: string }).name.trim(),
-          amount: (item as { amount: string }).amount.trim(),
-        };
-      });
-
-      if (items.some((item) => item === null)) {
+      if (itemIds.length === 0) {
         return null;
       }
 
       categories.push({
         name: category.name.trim(),
-        total: category.total.trim(),
-        items: items as ExpenseCategory['items'],
+        itemIds,
       });
     }
 

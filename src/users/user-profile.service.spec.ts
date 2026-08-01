@@ -47,6 +47,7 @@ describe('UserProfileService', () => {
       create: {
         id: 'oauth-user-1',
         email: 'oauth-user-1@users.expenseai.local',
+        ai_credit_limit: 50,
       },
       update: {},
     });
@@ -60,6 +61,7 @@ describe('UserProfileService', () => {
       create: {
         id: 'oauth-user-1',
         email: 'user@example.com',
+        ai_credit_limit: 50,
       },
       update: { email: 'user@example.com' },
     });

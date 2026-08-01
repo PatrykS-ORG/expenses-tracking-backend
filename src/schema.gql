@@ -2,6 +2,39 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+enum AiActionType {
+  EXPENSE_SUMMARY
+  RECEIPT_SCAN
+  TEMPLATE_GENERATION
+}
+
+type AiUsageLogEntry {
+  action: AiActionType!
+  completionTokens: Int!
+  createdAt: DateTime!
+  creditsUsed: Int!
+  errorMessage: String
+  id: ID!
+  model: String!
+  promptTokens: Int!
+  success: Boolean!
+  totalTokens: Int!
+  trigger: AiUsageTrigger!
+}
+
+type AiUsageSummary {
+  limit: Int!
+  periodEnd: DateTime!
+  periodStart: DateTime!
+  remaining: Int!
+  used: Int!
+}
+
+enum AiUsageTrigger {
+  MANUAL
+  SCHEDULED
+}
+
 input ApproveReceiptExpensesInput {
   text: String!
 }
@@ -74,6 +107,8 @@ type ProfileUser {
 type Query {
   currentExpenseFile: CurrentExpenseFile!
   health: String!
+  myAiUsageLog(limit: Int, offset: Int): [AiUsageLogEntry!]!
+  myAiUsageSummary: AiUsageSummary!
   myProfile: Profile!
   mySummarySchedule: SummarySchedule!
   myTemplateSettings: TemplateSettings!

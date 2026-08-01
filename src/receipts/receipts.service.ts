@@ -5,6 +5,7 @@ import { SupabaseStorageService } from '../data-sources/supabase-storage.service
 import { ScanReceiptInput } from './dto/scan-receipt.input';
 import { ReceiptScanResult } from './models/receipt-scan-result.model';
 import { TemplatesService } from '../templates/templates.service';
+import { UserProfileService } from '../users/user-profile.service';
 
 const SUPPORTED_IMAGE_TYPES = new Set([
   'image/jpeg',
@@ -18,6 +19,7 @@ export class ReceiptsService {
     private readonly storageService: SupabaseStorageService,
     private readonly templatesService: TemplatesService,
     private readonly aiService: AiService,
+    private readonly userProfileService: UserProfileService,
   ) {}
 
   async approveReceiptExpenses(
@@ -58,7 +60,13 @@ export class ReceiptsService {
     return true;
   }
 
-  async scanReceipt(input: ScanReceiptInput): Promise<ReceiptScanResult> {
+  async scanReceipt(
+    userId: string,
+    userEmail: string | undefined,
+    input: ScanReceiptInput,
+  ): Promise<ReceiptScanResult> {
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
+
     const file = decodeUploadedFile(input);
 
     if (!SUPPORTED_IMAGE_TYPES.has(file.mimetype)) {
@@ -68,6 +76,7 @@ export class ReceiptsService {
     }
 
     const extractedText = await this.aiService.extractExpensesFromImage(
+      userId,
       file.buffer,
       file.mimetype,
     );

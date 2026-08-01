@@ -9,6 +9,10 @@ import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { DataSourceType } from '../generated/prisma/client';
 import { parseFileUploadConfig } from '../data-sources/data-source.types';
+import {
+  AI_MONTHLY_CREDIT_LIMIT_ENV,
+  DEFAULT_MONTHLY_AI_CREDIT_LIMIT,
+} from '../ai-usage/ai-usage.constants';
 
 @Injectable()
 export class UserProfileService {
@@ -24,9 +28,29 @@ export class UserProfileService {
 
     await this.prisma.user.upsert({
       where: { id: userId },
-      create: { id: userId, email: resolvedEmail },
+      create: {
+        id: userId,
+        email: resolvedEmail,
+        ai_credit_limit: this.getDefaultMonthlyCreditLimit(),
+      },
       update: email ? { email: resolvedEmail } : {},
     });
+  }
+
+  private getDefaultMonthlyCreditLimit(): number {
+    const raw = this.configService
+      .get<string>(AI_MONTHLY_CREDIT_LIMIT_ENV)
+      ?.trim();
+    if (!raw) {
+      return DEFAULT_MONTHLY_AI_CREDIT_LIMIT;
+    }
+
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return DEFAULT_MONTHLY_AI_CREDIT_LIMIT;
+    }
+
+    return parsed;
   }
 
   async deleteAccount(userId: string): Promise<boolean> {

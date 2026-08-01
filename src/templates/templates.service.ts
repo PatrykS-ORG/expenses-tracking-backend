@@ -95,6 +95,7 @@ export class TemplatesService {
     await this.ensureTemplateLimitNotReached(userId);
 
     const generatedHtml = await this.aiService.generateTemplate(
+      userId,
       input.tone,
       input.detailLevel,
       input.focus,

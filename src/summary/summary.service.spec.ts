@@ -3,9 +3,11 @@ import { NotFoundException } from '@nestjs/common';
 import { SummaryService } from './summary.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
+import { AiUsageService } from '../ai-usage/ai-usage.service';
 import { EmailService } from '../email/email.service';
 import { DataSourceResolverService } from '../data-sources/data-source-resolver.service';
 import { UserProfileService } from '../users/user-profile.service';
+import { AiUsageTrigger } from '../generated/prisma/client';
 
 jest.mock('webdav', () => ({
   createClient: jest.fn(),
@@ -23,6 +25,11 @@ describe('SummaryService', () => {
 
   const aiServiceMock = {
     analyzeExpenses: jest.fn(),
+  };
+
+  const aiUsageServiceMock = {
+    hasRemainingCredits: jest.fn(),
+    ensureWithinLimit: jest.fn(),
   };
 
   const emailServiceMock = {
@@ -45,6 +52,7 @@ describe('SummaryService', () => {
         SummaryService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: AiService, useValue: aiServiceMock },
+        { provide: AiUsageService, useValue: aiUsageServiceMock },
         { provide: EmailService, useValue: emailServiceMock },
         {
           provide: DataSourceResolverService,
@@ -140,10 +148,12 @@ describe('SummaryService', () => {
     ).resolves.toBe(true);
 
     expect(aiServiceMock.analyzeExpenses).toHaveBeenCalledWith(
+      'user-1',
       'Salary: 3000 EUR\nGroceries: 100 EUR',
       'EN',
       'EUR',
       '2026-07',
+      AiUsageTrigger.MANUAL,
     );
     expect(emailServiceMock.sendEmail).toHaveBeenCalledWith(
       'user@example.com',

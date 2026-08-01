@@ -15,13 +15,18 @@ import {
 import { formatMoneyAmount } from './expense-amount.formatter';
 import { CanonicalExpense, parseExpenseFile } from './expense-file.parser';
 import { buildExpensesListHtml } from '../email/expenses-list.builder';
-import { SummaryEmailLanguage } from '../generated/prisma/client';
+import {
+  AiActionType,
+  AiUsageTrigger,
+  SummaryEmailLanguage,
+} from '../generated/prisma/client';
 import {
   formatSummaryMonth,
   getExpensesTotalLabel,
   getSummaryLanguageInstructions,
   normalizeSummaryEmailLanguage,
 } from '../summary/summary-email-language.util';
+import { AiUsageService } from '../ai-usage/ai-usage.service';
 
 const SYSTEM_PROMPT = `You are an expert HTML email designer and financial assistant.
 Create a personalized monthly expense summary email template in clean, responsive HTML.
@@ -92,6 +97,12 @@ Rules:
 4) If you cannot read an amount confidently, skip that line.
 5) If no expenses can be extracted, return exactly: NO_EXPENSES_FOUND`;
 
+type TokenUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+};
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
@@ -99,6 +110,7 @@ export class AiService {
   constructor(
     private configService: ConfigService,
     private receiptOcrService: ReceiptOcrService,
+    private aiUsageService: AiUsageService,
   ) {}
 
   private createClient(): OpenAI {
@@ -116,12 +128,56 @@ export class AiService {
     });
   }
 
+  private extractUsage(
+    usage: OpenAI.Completions.CompletionUsage | undefined,
+  ): TokenUsage {
+    return {
+      promptTokens: usage?.prompt_tokens ?? 0,
+      completionTokens: usage?.completion_tokens ?? 0,
+      totalTokens: usage?.total_tokens ?? 0,
+    };
+  }
+
+  private async recordCallUsage(params: {
+    userId: string;
+    action: AiActionType;
+    trigger: AiUsageTrigger;
+    model: string;
+    usage: TokenUsage;
+    success: boolean;
+    errorMessage?: string | null;
+  }): Promise<void> {
+    try {
+      await this.aiUsageService.recordUsage({
+        userId: params.userId,
+        action: params.action,
+        trigger: params.trigger,
+        model: params.model,
+        promptTokens: params.usage.promptTokens,
+        completionTokens: params.usage.completionTokens,
+        totalTokens: params.usage.totalTokens,
+        success: params.success,
+        errorMessage: params.errorMessage,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to record AI usage for user ${params.userId}: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
+
   async generateTemplate(
+    userId: string,
     tone: string,
     detailLevel: string,
     focus: string,
     visualStyle: string,
   ): Promise<string> {
+    await this.aiUsageService.ensureWithinLimit(userId);
+
     const userPrompt = `User Preferences:
 - Tone of the message: ${tone}
 - Detail level: ${detailLevel} (if 'podsumowanie' focus on total numbers, if 'wyliczenie' make sure the {{ expensesList }} takes a prominent place with items breakdown)
@@ -129,10 +185,17 @@ export class AiService {
 - Visual style: ${visualStyle}`;
 
     const openai = this.createClient();
+    const model = 'deepseek-chat';
+    let usage: TokenUsage = {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+    };
+    let recorded = false;
 
     try {
       const response = await openai.chat.completions.create({
-        model: 'deepseek-chat',
+        model,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: userPrompt },
@@ -141,12 +204,24 @@ export class AiService {
         max_tokens: 8192,
       });
 
+      usage = this.extractUsage(response.usage);
+
       const choice = response.choices[0];
       if (!choice?.message?.content) {
         this.logger.error(
           'DeepSeek returned an empty completion',
           JSON.stringify(response),
         );
+        await this.recordCallUsage({
+          userId,
+          action: AiActionType.TEMPLATE_GENERATION,
+          trigger: AiUsageTrigger.MANUAL,
+          model,
+          usage,
+          success: false,
+          errorMessage: 'AI returned an empty template',
+        });
+        recorded = true;
         throw new ServiceUnavailableException('AI returned an empty template');
       }
 
@@ -154,9 +229,36 @@ export class AiService {
       if (content.startsWith('```html')) {
         content = content.replace(/```html\n/g, '').replace(/```/g, '');
       }
+
+      await this.recordCallUsage({
+        userId,
+        action: AiActionType.TEMPLATE_GENERATION,
+        trigger: AiUsageTrigger.MANUAL,
+        model,
+        usage,
+        success: true,
+      });
+      recorded = true;
+
       return content.trim();
     } catch (error) {
-      if (error instanceof ServiceUnavailableException) {
+      if (!recorded && (usage.totalTokens > 0 || usage.promptTokens > 0)) {
+        await this.recordCallUsage({
+          userId,
+          action: AiActionType.TEMPLATE_GENERATION,
+          trigger: AiUsageTrigger.MANUAL,
+          model,
+          usage,
+          success: false,
+          errorMessage:
+            error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+
+      if (
+        error instanceof ServiceUnavailableException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 
@@ -179,11 +281,15 @@ export class AiService {
   }
 
   async analyzeExpenses(
+    userId: string,
     rawExpenseContent: string,
     language: SummaryEmailLanguage = SummaryEmailLanguage.PL,
     currency = 'PLN',
     period?: string,
+    trigger: AiUsageTrigger = AiUsageTrigger.MANUAL,
   ): Promise<ExpenseSummary> {
+    await this.aiUsageService.ensureWithinLimit(userId);
+
     const resolvedLanguage = normalizeSummaryEmailLanguage(language);
     const parsedFile = parseExpenseFile(rawExpenseContent);
 
@@ -194,6 +300,7 @@ export class AiService {
     }
 
     const openai = this.createClient();
+    const model = 'deepseek-chat';
     const languageInstructions =
       getSummaryLanguageInstructions(resolvedLanguage);
     const totalsHint = this.buildTotalsHint(
@@ -209,9 +316,16 @@ export class AiService {
       )
       .join('\n');
 
+    let usage: TokenUsage = {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+    };
+    let recorded = false;
+
     try {
       const response = await openai.chat.completions.create({
-        model: 'deepseek-chat',
+        model,
         messages: [
           { role: 'system', content: EXPENSE_ANALYSIS_PROMPT },
           {
@@ -228,13 +342,35 @@ ${canonicalList}`,
         max_tokens: 8192,
       });
 
+      usage = this.extractUsage(response.usage);
+
       const choice = response.choices[0];
       if (!choice?.message?.content) {
+        await this.recordCallUsage({
+          userId,
+          action: AiActionType.EXPENSE_SUMMARY,
+          trigger,
+          model,
+          usage,
+          success: false,
+          errorMessage: 'AI returned an empty summary',
+        });
+        recorded = true;
         throw new ServiceUnavailableException('AI returned an empty summary');
       }
 
       const aiResult = this.parseAiCategorization(choice.message.content);
       if (!aiResult) {
+        await this.recordCallUsage({
+          userId,
+          action: AiActionType.EXPENSE_SUMMARY,
+          trigger,
+          model,
+          usage,
+          success: false,
+          errorMessage: 'AI returned malformed summary JSON',
+        });
+        recorded = true;
         throw new ServiceUnavailableException(
           'AI returned malformed summary JSON',
         );
@@ -249,6 +385,16 @@ ${canonicalList}`,
       );
 
       if (reconciled.categories.length === 0) {
+        await this.recordCallUsage({
+          userId,
+          action: AiActionType.EXPENSE_SUMMARY,
+          trigger,
+          model,
+          usage,
+          success: false,
+          errorMessage: 'AI returned no usable expense categories',
+        });
+        recorded = true;
         throw new ServiceUnavailableException(
           'AI returned no usable expense categories',
         );
@@ -257,6 +403,16 @@ ${canonicalList}`,
       const totalLabel = getExpensesTotalLabel(resolvedLanguage);
       const listLanguage =
         resolvedLanguage === SummaryEmailLanguage.EN ? 'en' : 'pl';
+
+      await this.recordCallUsage({
+        userId,
+        action: AiActionType.EXPENSE_SUMMARY,
+        trigger,
+        model,
+        usage,
+        success: true,
+      });
+      recorded = true;
 
       return {
         userName: aiResult.userName,
@@ -274,6 +430,19 @@ ${canonicalList}`,
         ),
       };
     } catch (error) {
+      if (!recorded && (usage.totalTokens > 0 || usage.promptTokens > 0)) {
+        await this.recordCallUsage({
+          userId,
+          action: AiActionType.EXPENSE_SUMMARY,
+          trigger,
+          model,
+          usage,
+          success: false,
+          errorMessage:
+            error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+
       if (
         error instanceof ServiceUnavailableException ||
         error instanceof BadRequestException
@@ -300,13 +469,23 @@ ${canonicalList}`,
   }
 
   async extractExpensesFromImage(
+    userId: string,
     imageBuffer: Buffer,
     mimeType: string,
   ): Promise<string> {
+    await this.aiUsageService.ensureWithinLimit(userId);
+
     const openai = this.createClient();
     const model =
       this.configService.get<string>('DEEPSEEK_VISION_MODEL')?.trim() ||
       'deepseek-chat';
+
+    let usage: TokenUsage = {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+    };
+    let recorded = false;
 
     try {
       const ocrText = await this.receiptOcrService.extractText(
@@ -327,9 +506,21 @@ ${canonicalList}`,
         max_tokens: 2048,
       });
 
+      usage = this.extractUsage(response.usage);
+
       const choice = response.choices[0];
       const rawContent = choice?.message?.content;
       if (!rawContent) {
+        await this.recordCallUsage({
+          userId,
+          action: AiActionType.RECEIPT_SCAN,
+          trigger: AiUsageTrigger.MANUAL,
+          model,
+          usage,
+          success: false,
+          errorMessage: 'AI returned empty receipt extraction',
+        });
+        recorded = true;
         throw new ServiceUnavailableException(
           'AI returned empty receipt extraction',
         );
@@ -342,12 +533,48 @@ ${canonicalList}`,
         .trim();
 
       if (!content) {
+        await this.recordCallUsage({
+          userId,
+          action: AiActionType.RECEIPT_SCAN,
+          trigger: AiUsageTrigger.MANUAL,
+          model,
+          usage,
+          success: false,
+          errorMessage: 'AI returned blank receipt text',
+        });
+        recorded = true;
         throw new ServiceUnavailableException('AI returned blank receipt text');
       }
 
+      await this.recordCallUsage({
+        userId,
+        action: AiActionType.RECEIPT_SCAN,
+        trigger: AiUsageTrigger.MANUAL,
+        model,
+        usage,
+        success: true,
+      });
+      recorded = true;
+
       return content;
     } catch (error) {
-      if (error instanceof ServiceUnavailableException) {
+      if (!recorded && (usage.totalTokens > 0 || usage.promptTokens > 0)) {
+        await this.recordCallUsage({
+          userId,
+          action: AiActionType.RECEIPT_SCAN,
+          trigger: AiUsageTrigger.MANUAL,
+          model,
+          usage,
+          success: false,
+          errorMessage:
+            error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+
+      if (
+        error instanceof ServiceUnavailableException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 

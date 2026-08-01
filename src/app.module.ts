@@ -7,6 +7,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
 import { AiModule } from './ai/ai.module';
+import { AiUsageModule } from './ai-usage/ai-usage.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { TemplatesModule } from './templates/templates.module';
 import { DataSourcesModule } from './data-sources/data-sources.module';
@@ -37,6 +38,7 @@ import { SummaryModule } from './summary/summary.module';
     }),
     PrismaModule,
     AuthModule,
+    AiUsageModule,
     AiModule,
     TemplatesModule,
     DataSourcesModule,

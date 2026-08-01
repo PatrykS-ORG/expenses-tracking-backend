@@ -40,6 +40,7 @@
   - onboarding template generation
   - expense text analysis
   - receipt expense extraction from OCR text (`DEEPSEEK_VISION_MODEL`, defaults to `deepseek-chat`)
+- Monthly credit metering via `AiUsageModule` (`AI_TOKENS_PER_CREDIT`, `AI_MONTHLY_CREDIT_LIMIT`)
 
 ## Receipt OCR and image processing
 

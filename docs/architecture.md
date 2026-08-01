@@ -180,6 +180,18 @@ File upload mutations accept `ExpenseFileUploadInput` / `ScanReceiptInput` with 
 3. Appends approved receipt text and overwrites the Storage object.
 4. Updates `uploadedAt` in `data_source_config`.
 
+## Expense analysis flow
+
+`AiService.analyzeExpenses(rawExpenseContent, language, currency, period)`:
+
+1. `parseExpenseFile()` (`src/ai/expense-file.parser.ts`) deterministically parses raw expense text into a salary total plus a canonical expense list (duplicate names are merged case/whitespace-insensitively; every amount is stored in cents).
+2. DeepSeek receives only the canonical expense list (`id`, `name`, `amount`) and a computed totals hint. Its JSON response is limited to category names + `itemIds` assignments and a `savingsMessage` — it never computes or returns amounts, totals, or the current month.
+3. `reconcileExpenseAnalysis()` (`src/ai/expense-analysis.reconciler.ts`) rebuilds `salaryAmount`, `totalExpenses`, `savingsAmount`, and per-category/item totals purely from the canonical cents. AI-provided `itemIds` are validated against the canonical list; unknown or duplicate IDs are dropped and any unassigned expenses fall into an "Other expenses" category. This guarantees totals stay internally consistent even if the AI miscategorizes something.
+4. `formatMoneyAmount()` (`src/ai/expense-amount.formatter.ts`) formats cents into locale-aware strings (e.g. `1 234,56 zł` for PL, `1,234.56 PLN` for EN).
+5. `currentMonth` is derived from the caller-supplied `period` (`YYYY-MM`) via `formatSummaryMonth()` instead of "now", so cron-generated summaries always label the month they actually cover.
+
+All arithmetic stays deterministic in application code; the LLM is only responsible for categorization and the natural-language `savingsMessage`.
+
 ## Rendering + email flow
 
 `TemplatesService.sendTestEmail`:

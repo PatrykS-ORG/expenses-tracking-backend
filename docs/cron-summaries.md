@@ -36,8 +36,8 @@ curl -X POST "http://localhost:5173/api/cron/process-summaries" \
 For each due user:
 
 1. Resolve expense file through `DataSourceResolverService` (`FILE_UPLOAD` or `NEXTCLOUD`).
-2. Analyze content with `AiService.analyzeExpenses()` using the user's `summary_email_language` (`PL` / `EN`) and `summary_currency`.
-3. Map AI JSON categories to an HTML expense table via `buildExpensesListHtml()`, then inject placeholders into the active template.
+2. Analyze content with `AiService.analyzeExpenses()`, passing the user's `summary_email_language` (`PL` / `EN`), `summary_currency`, and the resolved `period` (`YYYY-MM`). Amounts/totals are computed deterministically from the parsed file and only cross-checked against the AI's categorization — see [Expense analysis flow](./architecture.md#expense-analysis-flow).
+3. Map the reconciled categories to an HTML expense table via `buildExpensesListHtml()`, then inject placeholders into the active template.
 4. Render active HTML template with `applyTemplateValues()`.
 5. Send email to `User.email` through `EmailService`.
 6. Upsert `SummaryLog` with period key `YYYY-MM` (previous calendar month in user timezone).
@@ -107,12 +107,15 @@ If a successful log already exists for the current period, the service advances 
 
 ## Related code
 
-| Area                 | Path                                   |
-| -------------------- | -------------------------------------- |
-| Batch service        | `src/summary/summary.service.ts`       |
-| Schedule math        | `src/summary/summary-schedule.util.ts` |
-| REST controller      | `src/cron/cron.controller.ts`          |
-| Cron auth guard      | `src/cron/cron-auth.guard.ts`          |
-| GraphQL schedule API | `src/summary/summary.resolver.ts`      |
+| Area                  | Path                                    |
+| --------------------- | --------------------------------------- |
+| Batch service         | `src/summary/summary.service.ts`        |
+| Schedule math         | `src/summary/summary-schedule.util.ts`  |
+| REST controller       | `src/cron/cron.controller.ts`           |
+| Cron auth guard       | `src/cron/cron-auth.guard.ts`           |
+| GraphQL schedule API  | `src/summary/summary.resolver.ts`       |
+| Expense file parsing  | `src/ai/expense-file.parser.ts`         |
+| Amount reconciliation | `src/ai/expense-analysis.reconciler.ts` |
+| Money formatting      | `src/ai/expense-amount.formatter.ts`    |
 
 See also [database.md](./database.md) and [architecture.md](./architecture.md).

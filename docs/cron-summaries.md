@@ -35,13 +35,14 @@ curl -X POST "http://localhost:5173/api/cron/process-summaries" \
 
 For each due user:
 
-1. Resolve expense file through `DataSourceResolverService` (`FILE_UPLOAD` or `NEXTCLOUD`).
-2. Analyze content with `AiService.analyzeExpenses()`, passing the user's `summary_email_language` (`PL` / `EN`), `summary_currency`, and the resolved `period` (`YYYY-MM`). Amounts/totals are computed deterministically from the parsed file and only cross-checked against the AI's categorization — see [Expense analysis flow](./architecture.md#expense-analysis-flow).
-3. Map the reconciled categories to an HTML expense table via `buildExpensesListHtml()`, then inject placeholders into the active template.
-4. Render active HTML template with `applyTemplateValues()`.
-5. Send email to `User.email` through `EmailService`.
-6. Upsert `SummaryLog` with period key `YYYY-MM` (previous calendar month in user timezone).
-7. Advance `next_summary_at` to the next scheduled occurrence.
+1. Skip if the user has no remaining AI credits (`AiUsageService.hasRemainingCredits`) — outcome `skipped` with reason `AI credit limit reached`.
+2. Resolve expense file through `DataSourceResolverService` (`FILE_UPLOAD` or `NEXTCLOUD`).
+3. Analyze content with `AiService.analyzeExpenses(..., trigger: SCHEDULED)`, passing the user's `summary_email_language` (`PL` / `EN`), `summary_currency`, and the resolved `period` (`YYYY-MM`). Amounts/totals are computed deterministically from the parsed file and only cross-checked against the AI's categorization — see [Expense analysis flow](./architecture.md#expense-analysis-flow). Token usage is audited as `EXPENSE_SUMMARY` / `SCHEDULED`.
+4. Map the reconciled categories to an HTML expense table via `buildExpensesListHtml()`, then inject placeholders into the active template.
+5. Render active HTML template with `applyTemplateValues()`.
+6. Send email to `User.email` through `EmailService`.
+7. Upsert `SummaryLog` with period key `YYYY-MM` (previous calendar month in user timezone).
+8. Advance `next_summary_at` to the next scheduled occurrence.
 
 On failure:
 
@@ -65,9 +66,10 @@ Stored on `User`:
 ## Manual current summary
 
 The authenticated `sendSummaryNow` GraphQL mutation runs the same data-source,
-AI analysis, template rendering, and email delivery steps immediately. It sends
-to the account email but does not create a `SummaryLog` or change
-`next_summary_at`.
+AI analysis, template rendering, and email delivery steps immediately (trigger
+`MANUAL`). It sends to the account email but does not create a `SummaryLog` or
+change `next_summary_at`. When the user's monthly AI credit limit is reached,
+the mutation fails with a clear `BadRequestException`.
 
 Users manage these settings through GraphQL:
 

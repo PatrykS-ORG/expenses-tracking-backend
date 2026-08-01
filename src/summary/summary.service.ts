@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
+import { AiUsageService } from '../ai-usage/ai-usage.service';
 import { EmailService } from '../email/email.service';
 import { DataSourceResolverService } from '../data-sources/data-source-resolver.service';
 import {
@@ -27,6 +28,7 @@ import {
 } from './models/summary-email-language.enum';
 import { getSummaryEmailSubject } from './summary-email-language.util';
 import {
+  AiUsageTrigger,
   SummaryEmailLanguage,
   SummaryLogStatus,
   User,
@@ -98,6 +100,7 @@ export class SummaryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiService: AiService,
+    private readonly aiUsageService: AiUsageService,
     private readonly emailService: EmailService,
     private readonly dataSourceResolver: DataSourceResolverService,
     private readonly userProfileService: UserProfileService,
@@ -226,13 +229,14 @@ export class SummaryService {
     this.ensureUserReadyForSummaries(user);
 
     const period = getSummaryPeriod(normalizeTimezone(user.summary_timezone));
-    await this.renderAndSendSummary(user, period);
+    await this.renderAndSendSummary(user, period, AiUsageTrigger.MANUAL);
     return true;
   }
 
   private async renderAndSendSummary(
     user: DueUser,
     period: string,
+    trigger: AiUsageTrigger,
   ): Promise<void> {
     if (!user.activeTemplate) {
       throw new NotFoundException('Active template not found');
@@ -245,10 +249,12 @@ export class SummaryService {
     }
 
     const summary = await this.aiService.analyzeExpenses(
+      user.id,
       rawExpenseContent,
       user.summary_email_language,
       user.summary_currency,
       period,
+      trigger,
     );
     const values = expenseSummaryToTemplateValues(summary, user.email);
     const html = applyTemplateValues(user.activeTemplate.content, values);
@@ -312,6 +318,22 @@ export class SummaryService {
           reason: 'no active template',
         };
         result.outcomes.push(outcome);
+        continue;
+      }
+
+      const hasCredits = await this.aiUsageService.hasRemainingCredits(user.id);
+      if (!hasCredits) {
+        result.skipped += 1;
+        const outcome: SummaryProcessOutcome = {
+          userId: user.id,
+          email: user.email,
+          action: 'skipped',
+          reason: 'AI credit limit reached',
+        };
+        result.outcomes.push(outcome);
+        this.logger.warn(
+          `Skipping user ${user.id} (${user.email}): ${outcome.reason}`,
+        );
         continue;
       }
 
@@ -379,7 +401,7 @@ export class SummaryService {
     }
 
     try {
-      await this.renderAndSendSummary(user, period);
+      await this.renderAndSendSummary(user, period, AiUsageTrigger.SCHEDULED);
 
       await this.prisma.summaryLog.upsert({
         where: {

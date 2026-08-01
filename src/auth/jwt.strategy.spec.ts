@@ -10,9 +10,9 @@ function createConfigMock(
   values: Record<string, string>,
 ): Pick<ConfigService, 'get'> {
   return {
-    get: jest.fn((key: string, defaultValue?: string) => {
-      return values[key] ?? defaultValue;
-    }),
+    get: jest.fn((key: string | symbol, defaultValue?: unknown) => {
+      return values[String(key)] ?? defaultValue;
+    }) as ConfigService['get'],
   };
 }
 

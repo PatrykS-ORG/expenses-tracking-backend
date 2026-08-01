@@ -13,6 +13,7 @@ import { SummaryResolver } from '../src/summary/summary.resolver';
 import { SummaryService } from '../src/summary/summary.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AiService } from '../src/ai/ai.service';
+import { AiUsageService } from '../src/ai-usage/ai-usage.service';
 import { EmailService } from '../src/email/email.service';
 import { DataSourceResolverService } from '../src/data-sources/data-source-resolver.service';
 import { UserProfileService } from '../src/users/user-profile.service';
@@ -132,6 +133,13 @@ describe('OAuth provisioning (GraphQL e2e)', () => {
         UserProfileService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: AiService, useValue: { analyzeExpenses: jest.fn() } },
+        {
+          provide: AiUsageService,
+          useValue: {
+            hasRemainingCredits: jest.fn().mockResolvedValue(true),
+            ensureWithinLimit: jest.fn(),
+          },
+        },
         { provide: EmailService, useValue: { sendEmail: jest.fn() } },
         {
           provide: DataSourceResolverService,

@@ -23,6 +23,17 @@ enum SummaryEmailLanguage {
   EN
 }
 
+enum AiActionType {
+  TEMPLATE_GENERATION
+  EXPENSE_SUMMARY
+  RECEIPT_SCAN
+}
+
+enum AiUsageTrigger {
+  MANUAL
+  SCHEDULED
+}
+
 model User {
   id                    String               @id @default(uuid()) // Powinno być synchronizowane z Supabase Auth UID
   email                 String               @unique
@@ -36,9 +47,11 @@ model User {
   summary_currency      String               @default("PLN")
   summary_enabled       Boolean              @default(false)
   next_summary_at       DateTime?
+  ai_credit_limit       Int                  @default(50)
   created_at            DateTime       @default(now())
   templates             Template[]
   summaryLogs           SummaryLog[]
+  aiUsageLogs           AiUsageLog[]
 
   // Relacja do aktywnego szablonu
   activeTemplate Template? @relation("ActiveTemplate", fields: [active_template_id], references: [id])
@@ -68,4 +81,23 @@ model Template {
   // Relacja zwrotna do użytkownika
   user           User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
   activeForUsers User[] @relation("ActiveTemplate")
+}
+
+model AiUsageLog {
+  id                String         @id @default(uuid())
+  user_id           String
+  action            AiActionType
+  trigger           AiUsageTrigger @default(MANUAL)
+  model             String
+  prompt_tokens     Int
+  completion_tokens Int
+  total_tokens      Int
+  credits_used      Int
+  success           Boolean        @default(true)
+  error_message     String?
+  created_at        DateTime       @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at])
 }

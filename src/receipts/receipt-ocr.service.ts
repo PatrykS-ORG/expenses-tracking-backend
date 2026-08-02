@@ -95,15 +95,38 @@ export class ReceiptOcrService implements OnModuleInit, OnModuleDestroy {
   private async initializeWorker(): Promise<void> {
     const ocrLanguage =
       this.configService.get<string>('RECEIPT_OCR_LANG')?.trim() || 'eng+pol';
+    const pageSegMode = this.resolvePageSegMode();
 
     const worker = await Tesseract.createWorker(ocrLanguage);
     await worker.setParameters({
-      tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+      tessedit_pageseg_mode: pageSegMode,
       user_defined_dpi: '300',
       preserve_interword_spaces: '1',
     });
 
     this.worker = worker;
+  }
+
+  /**
+   * Receipts are narrow single-column strips of text. `PSM.AUTO` runs full
+   * page-layout analysis and frequently misdetects the name column and the
+   * "qty x unit_price total" column as two separate blocks, emitting all
+   * item names first and all price lines second — silently decoupling every
+   * name from its price. `PSM.SINGLE_COLUMN` keeps each physical line intact
+   * (name and its price on the same output line), which is what downstream
+   * parsing (and the LLM) relies on to pair names with the correct amount.
+   */
+  private resolvePageSegMode(): Tesseract.PSM {
+    const configured = this.configService
+      .get<string>('RECEIPT_OCR_PSM')
+      ?.trim();
+
+    const validModes = Object.values(Tesseract.PSM) as string[];
+    if (configured && validModes.includes(configured)) {
+      return configured as Tesseract.PSM;
+    }
+
+    return Tesseract.PSM.SINGLE_COLUMN;
   }
 
   private async recognizeVariant(
@@ -129,12 +152,15 @@ export class ReceiptOcrService implements OnModuleInit, OnModuleDestroy {
       return null;
     }
 
-    return readable.sort((left, right) => {
-      if (right.wordCount !== left.wordCount) {
-        return right.wordCount - left.wordCount;
-      }
-      return right.confidence - left.confidence;
-    })[0];
+    // Word count alone rewards noisy binarization that "recognizes" lots of
+    // garbage tokens; confidence alone can favor a near-empty read. Scoring
+    // by their product balances "read a lot of text" against "was actually
+    // confident about it", which in practice picks the visibly cleaner
+    // candidate far more often than either metric alone.
+    return readable.sort(
+      (left, right) =>
+        right.confidence * right.wordCount - left.confidence * left.wordCount,
+    )[0];
   }
 
   private normalizeOcrText(rawText: string): string {

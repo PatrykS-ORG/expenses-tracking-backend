@@ -86,16 +86,27 @@ Example shape:
   ]
 }`;
 
-const RECEIPT_SCAN_PROMPT = `You are a financial assistant that extracts expenses from receipt OCR text.
+const RECEIPT_SCAN_PROMPT = `You are a financial assistant that extracts purchased-item expenses from noisy OCR text of a store receipt.
 Read the OCR text and return ONLY plain text lines in this format:
-<item or category>: <amount and currency>
+<item name>: <amount and currency>
 
-Rules:
+How receipt lines are structured (mainly Polish grocery receipts):
+1) Each purchased item usually spans two consecutive OCR lines:
+   - a name line, often ending with a single loose tax-category letter (e.g. A, B, C, F, X) that is NOT part of the name;
+   - a price line directly below/after it, shaped like "<qty> x<unit_price> <line_total>" (e.g. "2 x1,49 2,98") or just a single number when qty is 1.
+2) A line starting with "OPUST" (or similar discount wording) immediately follows the item it discounts. Its number is the discount amount to SUBTRACT from that item's price. Merge it into ONE output line for the item using the net (post-discount) price — never output the OPUST line separately.
+3) OCR sometimes fuses a stray tax-category letter onto a number's last digit (e.g. "5,194" instead of "5,19", "0,741" instead of "0,74"). If a number's last character is a letter (A/B/C/F/X) or an implausible trailing digit that breaks an otherwise clean two-decimal amount, strip it before using the number.
+4) When a "qty x unit_price total" line is present, sanity-check that qty × unit_price ≈ total (small rounding is fine). If they clearly disagree because one digit looks misread, prefer qty × unit_price as the amount — unit price and quantity are printed larger/cleaner than the fused total column.
+5) Ignore entirely: store name/address/NIP/register metadata, barcodes, VAT summary rows (e.g. "SPRZEDAŻ OPODATKOWANA", "PTU", "SUMA PTU"), subtotal/grand-total/payment rows (e.g. "Podsuma", "SUMA PLN", "DO ZAPŁATY", "ROZLICZENIE PŁATNOŚCI", "KARTA"), and transaction/date/receipt-number footers. NEVER use a number from one of these rows as an item's price, even if a nearby item price looks unclear — skip that item instead (see rule 8).
+6) Deposit/bag lines tied to an actual purchase (e.g. "Kaucja", "Reklamówka") ARE real expenses and should be kept as their own line. Refund/return summary rows (e.g. "OPAKOWANIA ZWROTNE SUMA") are not — skip those.
+7) Fix obvious OCR misspellings of common Polish grocery/product words using context (e.g. garbled letters in an otherwise recognizable product name) instead of copying garbage characters verbatim, but never invent a product that isn't there.
+8) If you cannot confidently pair an item with a specific price that appears directly next to it in the text, skip that item entirely rather than guessing or borrowing a number from elsewhere.
+
+Output rules:
 1) Do not return JSON, markdown, code blocks, bullets, or explanations.
-2) Return one expense per line.
-3) Keep original currency symbols/codes when visible.
-4) If you cannot read an amount confidently, skip that line.
-5) If no expenses can be extracted, return exactly: NO_EXPENSES_FOUND`;
+2) Return exactly one expense per line, using the item's real product name (not the raw fused OCR text) and its final net price.
+3) Keep the original currency symbol/code when one is visible in the text. If no currency symbol appears anywhere (typical for Polish receipts, where amounts are plain numbers with a comma decimal separator), infer the currency from context (store address, language, VAT wording) and append it — default to PLN for Polish-language receipts rather than leaving amounts unitless.
+4) If no expenses can be extracted, return exactly: NO_EXPENSES_FOUND`;
 
 type TokenUsage = {
   promptTokens: number;

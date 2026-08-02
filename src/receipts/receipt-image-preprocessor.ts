@@ -57,7 +57,10 @@ async function toSingleChannelUchar(
     .raw()
     .toBuffer({ resolveWithObject: true });
 
-  return { data, width: info.width, height: info.height };
+  // Copy defensively: sharp/libvips can alias the underlying pixel memory of
+  // `data` with the pipeline that produced it, which is unsafe once the
+  // buffer is handed to a brand new sharp() instance.
+  return { data: Buffer.from(data), width: info.width, height: info.height };
 }
 
 function adaptiveThreshold(
@@ -104,17 +107,15 @@ function adaptiveThreshold(
 }
 
 async function buildContrastVariant(basePng: Buffer): Promise<Buffer> {
-  try {
-    const { data, width, height } = await toSingleChannelUchar(basePng);
-
-    return sharp(data, { raw: { width, height, channels: 1 } })
-      .clahe({ width: 32, height: 32, maxSlope: 3 })
-      .sharpen()
-      .png()
-      .toBuffer();
-  } catch {
-    return sharp(basePng).greyscale().normalize().sharpen().png().toBuffer();
-  }
+  // Deliberately avoids sharp's `.clahe()`: under concurrent use (this
+  // variant is built alongside the other two via Promise.all) it has proven
+  // unreliable in practice — it can throw "hist_local: image must be
+  // VIPS_FORMAT_UCHAR" on genuinely valid 8-bit input, and libvips's error
+  // state has been observed to leak into unrelated sharp calls issued around
+  // the same time, which can take down this whole variant. A global
+  // normalize + sharpen pass is simpler, has no such failure mode, and is
+  // "good enough" contrast enhancement for thermal receipt scans.
+  return sharp(basePng).greyscale().normalize().sharpen().png().toBuffer();
 }
 
 async function buildAdaptiveThresholdVariant(basePng: Buffer): Promise<Buffer> {

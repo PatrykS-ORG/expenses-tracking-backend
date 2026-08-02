@@ -59,7 +59,7 @@ export class SupabaseStorageService {
     fileBuffer: Buffer,
   ): Promise<void> {
     if (fileBuffer.byteLength > MAX_UPLOAD_SIZE_BYTES) {
-      throw new BadRequestException('File content exceeds 2MB limit');
+      throw new BadRequestException('File content exceeds 5MB limit');
     }
 
     await this.uploadObject(

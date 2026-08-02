@@ -55,7 +55,7 @@ Use explicit relative imports (no path aliases configured).
 ## API conventions
 
 - GraphQL is the sole client-facing API at `/graphql`.
-- File uploads use base64-encoded inputs (`ExpenseFileUploadInput`, `ScanReceiptInput`) with a 2MB decoded size limit.
+- File uploads use base64-encoded inputs (`ExpenseFileUploadInput`, `ScanReceiptInput`) with a 5MB decoded size limit.
 
 ## Auth conventions
 

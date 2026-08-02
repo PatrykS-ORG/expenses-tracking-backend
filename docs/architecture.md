@@ -159,14 +159,14 @@ All client-facing operations are exposed through GraphQL at `/graphql`.
 | Mutation | `deleteTemplate`              | JWT    | Delete template                                                                     |
 | Mutation | `setActiveTemplate`           | JWT    | Set active template                                                                 |
 | Mutation | `updateDataSource`            | JWT    | Switch/update source config                                                         |
-| Mutation | `uploadExpenseFile`           | JWT    | Upload `.txt/.csv` (max 2MB, base64), set source to `FILE_UPLOAD`                   |
+| Mutation | `uploadExpenseFile`           | JWT    | Upload `.txt/.csv` (max 5MB, base64), set source to `FILE_UPLOAD`                   |
 | Mutation | `overwriteCurrentExpenseFile` | JWT    | Overwrite currently configured uploaded file (base64)                               |
 | Mutation | `sendTestEmail`               | JWT    | Render active template with sample values and send via Brevo                        |
 | Query    | `mySummarySchedule`           | JWT    | Read automatic summary schedule settings                                            |
 | Mutation | `updateSummarySchedule`       | JWT    | Update schedule and recalculate `next_summary_at`                                   |
 | Mutation | `sendSummaryNow`              | JWT    | Analyze the current expense file and email a real summary without changing schedule |
 | Mutation | `deleteMyAccount`             | JWT    | Delete Supabase Auth identity, profile data, and uploaded expense file              |
-| Mutation | `scanReceipt`                 | JWT    | Upload receipt image (JPEG/PNG/WEBP, max 2MB, base64); returns `{ extractedText }`  |
+| Mutation | `scanReceipt`                 | JWT    | Upload receipt image (JPEG/PNG/WEBP, max 5MB, base64); returns `{ extractedText }`  |
 | Mutation | `approveReceiptExpenses`      | JWT    | Append edited receipt expense text to the user's uploaded expense file              |
 | Query    | `myAiUsageSummary`            | JWT    | Current-month AI credit limit / used / remaining                                    |
 | Query    | `myAiUsageLog`                | JWT    | Paginated AI spend audit (`limit`, `offset`)                                        |

@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
-export const MAX_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024;
+export const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024;
 
 export interface DecodedFileUpload {
   buffer: Buffer;
@@ -35,7 +35,7 @@ export function decodeUploadedFile(input: {
   }
 
   if (buffer.byteLength > MAX_UPLOAD_SIZE_BYTES) {
-    throw new BadRequestException('File content exceeds 2MB limit');
+    throw new BadRequestException('File content exceeds 5MB limit');
   }
 
   return {

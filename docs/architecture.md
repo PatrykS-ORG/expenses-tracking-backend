@@ -182,6 +182,12 @@ File upload mutations accept `ExpenseFileUploadInput` / `ScanReceiptInput` with 
 3. `AiService.extractExpensesFromImage` checks the AI credit limit, preprocesses the image (Sharp), runs OCR (`ReceiptOcrService` / Tesseract), then sends OCR text to DeepSeek and records token usage.
 4. Returns plain-text expense lines (or `NO_EXPENSES_FOUND`).
 
+DeepSeek's hosted API is text-only (no image input support), so extraction accuracy depends entirely on OCR text quality:
+
+- `ReceiptOcrService` runs Tesseract with `PSM.SINGLE_COLUMN` (configurable via `RECEIPT_OCR_PSM`), not `PSM.AUTO`. Receipts are narrow single-column strips of text; `PSM.AUTO`'s full page-layout analysis reliably misdetects the item-name column and the "qty × unit price / total" column as two separate blocks and emits all names first, then all prices — silently decoupling every item from its price. `SINGLE_COLUMN` keeps each physical receipt line intact.
+- `receipt-image-preprocessor.ts` builds 3 OCR-ready variants (contrast-enhanced, adaptive-threshold, fixed-threshold) in parallel; `pickBestCandidate` scores them by `confidence × wordCount` rather than raw word count (which rewards noisy binarization that "recognizes" garbage tokens).
+- `RECEIPT_SCAN_PROMPT` encodes the structural conventions of Polish receipts (name + trailing VAT-letter line, `qty x unit_price total` line below it, `OPUST` discount lines tied to the preceding item) and explicitly forbids borrowing a price from an unrelated section (e.g. VAT/totals block) when an item's own price is unclear — the model must skip that item instead.
+
 `approveReceiptExpenses` (`ReceiptsResolver` → `ReceiptsService`):
 
 1. Resolves the user's `FILE_UPLOAD` source config via `TemplatesService`.

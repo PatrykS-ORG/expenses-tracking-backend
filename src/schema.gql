@@ -39,6 +39,13 @@ input ApproveReceiptExpensesInput {
   text: String!
 }
 
+input CreateManualSummaryInput {
+  categories: [ManualSummaryCategoryInput!]!
+  period: String!
+  salaryAmount: String!
+  savingsMessage: String
+}
+
 input CreateTemplateInput {
   content: String!
   name: String!
@@ -76,8 +83,20 @@ input GenerateTemplateInput {
   visualStyle: String!
 }
 
+input ManualSummaryCategoryInput {
+  items: [ManualSummaryCategoryItemInput!]
+  name: String!
+  total: String!
+}
+
+input ManualSummaryCategoryItemInput {
+  amount: String!
+  name: String!
+}
+
 type Mutation {
   approveReceiptExpenses(input: ApproveReceiptExpensesInput!): Boolean!
+  createManualSummary(input: CreateManualSummaryInput!): SummaryAnalyticsModel!
   createTemplate(input: CreateTemplateInput!): Template!
   deleteMyAccount: Boolean!
   deleteTemplate(templateId: String!): Boolean!
@@ -88,6 +107,7 @@ type Mutation {
   sendTestEmail(input: SendTestEmailInput!): Boolean!
   setActiveTemplate(templateId: String!): Boolean!
   updateDataSource(input: UpdateDataSourceInput!): Boolean!
+  updateManualSummary(input: UpdateManualSummaryInput!): SummaryAnalyticsModel!
   updateSummarySchedule(input: UpdateSummaryScheduleInput!): SummarySchedule!
   updateTemplate(input: UpdateTemplateInput!): Template!
   uploadExpenseFile(input: ExpenseFileUploadInput!): UploadedExpenseFile!
@@ -110,9 +130,12 @@ type Query {
   myAiUsageLog(limit: Int, offset: Int): [AiUsageLogEntry!]!
   myAiUsageSummary: AiUsageSummary!
   myProfile: Profile!
+  mySummaries: [SummaryAnalyticsModel!]!
+  mySummary(month: String!): SummaryAnalyticsModel
   mySummarySchedule: SummarySchedule!
   myTemplateSettings: TemplateSettings!
   myTemplates: [Template!]!
+  summaryCategoryKeys: [String!]!
 }
 
 type ReceiptScanResult {
@@ -127,6 +150,36 @@ input ScanReceiptInput {
 
 input SendTestEmailInput {
   recipientEmail: String!
+}
+
+type SummaryAnalyticsModel {
+  categories: [SummaryCategoryModel!]!
+  createdAt: DateTime!
+  currency: String!
+  id: String!
+  period: String!
+  salaryCents: Int!
+  savingsCents: Int!
+  savingsMessage: String
+  source: SummaryAnalyticsSource!
+  totalExpensesCents: Int!
+  updatedAt: DateTime!
+}
+
+enum SummaryAnalyticsSource {
+  MANUAL
+  SCHEDULED
+}
+
+type SummaryCategoryItemModel {
+  amountCents: Int!
+  name: String!
+}
+
+type SummaryCategoryModel {
+  items: [SummaryCategoryItemModel!]!
+  name: String!
+  totalCents: Int!
 }
 
 enum SummaryEmailLanguage {
@@ -162,6 +215,13 @@ type TemplateSettings {
 input UpdateDataSourceInput {
   dataSourceType: DataSourceType!
   nextcloudFilePath: String
+}
+
+input UpdateManualSummaryInput {
+  categories: [ManualSummaryCategoryInput!]!
+  period: String!
+  salaryAmount: String!
+  savingsMessage: String
 }
 
 input UpdateSummaryScheduleInput {

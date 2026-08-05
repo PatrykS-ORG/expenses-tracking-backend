@@ -134,13 +134,23 @@ describe('SummaryService', () => {
       'Salary: 3000 EUR\nGroceries: 100 EUR',
     );
     aiServiceMock.analyzeExpenses.mockResolvedValue({
-      userName: 'User',
-      currentMonth: 'July 2026',
-      salaryAmount: '3,000.00 EUR',
-      totalExpenses: '100.00 EUR',
-      savingsAmount: '2,900.00 EUR',
-      savingsMessage: 'A useful summary.',
-      expensesList: '<p>Groceries: 100.00 EUR</p>',
+      summary: {
+        userName: 'User',
+        currentMonth: 'July 2026',
+        salaryAmount: '3,000.00 EUR',
+        totalExpenses: '100.00 EUR',
+        savingsAmount: '2,900.00 EUR',
+        savingsMessage: 'A useful summary.',
+        expensesList: '<p>Groceries: 100.00 EUR</p>',
+      },
+      snapshot: {
+        currency: 'EUR',
+        salaryCents: 300_000,
+        totalExpensesCents: 10_000,
+        savingsCents: 290_000,
+        savingsMessage: 'A useful summary.',
+        categories: [],
+      },
     });
 
     await expect(

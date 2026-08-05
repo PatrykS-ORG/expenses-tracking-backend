@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -19,7 +20,12 @@ import {
   clampScheduleDay,
   clampScheduleHour,
   computeNextSummaryAt,
+  getCurrentCalendarPeriod,
   getSummaryPeriod,
+  isCreatableSummaryPeriod,
+  isEndedSummaryPeriod,
+  isOnOrAfterEarliestSummaryPeriod,
+  isValidSummaryPeriod,
   normalizeTimezone,
 } from './summary-schedule.util';
 import {
@@ -29,12 +35,25 @@ import {
 import { getSummaryEmailSubject } from './summary-email-language.util';
 import {
   AiUsageTrigger,
+  SummaryAnalyticsSource,
   SummaryEmailLanguage,
   SummaryLogStatus,
   User,
   DataSourceType,
 } from '../generated/prisma/client';
 import { UserProfileService } from '../users/user-profile.service';
+import { SummaryAnalyticsSnapshot } from './summary-analytics.types';
+import {
+  toSummaryAnalyticsRecord,
+  SummaryAnalyticsRecord,
+  categoriesToPrismaJson,
+} from './summary-analytics.mapper';
+import {
+  CreateManualSummaryInput,
+  UpdateManualSummaryInput,
+} from './models/summary-analytics.model';
+import { parseManualSummaryPayload } from './summary-manual-input.parser';
+import { CANONICAL_CATEGORY_KEYS } from './summary-category.constants';
 
 type DueUser = User & {
   activeTemplate: { content: string } | null;
@@ -233,11 +252,202 @@ export class SummaryService {
     return true;
   }
 
+  async getMySummaries(
+    userId: string,
+    userEmail?: string,
+  ): Promise<SummaryAnalyticsRecord[]> {
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
+    const timezone = await this.getUserTimezone(userId);
+    const currentPeriod = getCurrentCalendarPeriod(timezone);
+
+    const rows = await this.prisma.summaryAnalytics.findMany({
+      where: {
+        user_id: userId,
+        period: { lt: currentPeriod },
+      },
+      orderBy: { period: 'desc' },
+    });
+
+    return rows.map(toSummaryAnalyticsRecord);
+  }
+
+  async getMySummary(
+    userId: string,
+    period: string,
+    userEmail?: string,
+  ): Promise<SummaryAnalyticsRecord | null> {
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
+    const normalizedPeriod = period.trim();
+
+    if (!isValidSummaryPeriod(normalizedPeriod)) {
+      throw new BadRequestException('Invalid summary period format');
+    }
+
+    if (!isOnOrAfterEarliestSummaryPeriod(normalizedPeriod)) {
+      throw new BadRequestException(
+        'Summary periods before 2026-01 are not accepted',
+      );
+    }
+
+    const timezone = await this.getUserTimezone(userId);
+    if (!isEndedSummaryPeriod(normalizedPeriod, timezone)) {
+      return null;
+    }
+
+    const row = await this.prisma.summaryAnalytics.findUnique({
+      where: {
+        user_id_period: {
+          user_id: userId,
+          period: normalizedPeriod,
+        },
+      },
+    });
+
+    return row ? toSummaryAnalyticsRecord(row) : null;
+  }
+
+  getSummaryCategoryKeys(): readonly string[] {
+    return CANONICAL_CATEGORY_KEYS;
+  }
+
+  async createManualSummary(
+    userId: string,
+    userEmail: string | undefined,
+    input: CreateManualSummaryInput,
+  ): Promise<SummaryAnalyticsRecord> {
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
+    const period = input.period.trim();
+
+    if (!isValidSummaryPeriod(period)) {
+      throw new BadRequestException('Invalid summary period format');
+    }
+
+    if (!isOnOrAfterEarliestSummaryPeriod(period)) {
+      throw new BadRequestException(
+        'Summary periods before 2026-01 are not accepted',
+      );
+    }
+
+    const timezone = await this.getUserTimezone(userId);
+    if (!isCreatableSummaryPeriod(period, timezone)) {
+      throw new BadRequestException(
+        'Manual summaries can only be created for months older than the previous calendar month',
+      );
+    }
+
+    const existing = await this.prisma.summaryAnalytics.findUnique({
+      where: {
+        user_id_period: {
+          user_id: userId,
+          period,
+        },
+      },
+    });
+    if (existing) {
+      throw new ConflictException('Summary for this period already exists');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { summary_currency: true },
+    });
+    if (!user) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    const payload = parseManualSummaryPayload(input);
+    const row = await this.prisma.summaryAnalytics.create({
+      data: {
+        user_id: userId,
+        period,
+        source: SummaryAnalyticsSource.MANUAL,
+        currency: user.summary_currency,
+        salary_cents: payload.salaryCents,
+        total_expenses_cents: payload.totalExpensesCents,
+        savings_cents: payload.savingsCents,
+        savings_message: payload.savingsMessage,
+        categories: categoriesToPrismaJson(payload.categories),
+      },
+    });
+
+    return toSummaryAnalyticsRecord(row);
+  }
+
+  async updateManualSummary(
+    userId: string,
+    userEmail: string | undefined,
+    input: UpdateManualSummaryInput,
+  ): Promise<SummaryAnalyticsRecord> {
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
+    const period = input.period.trim();
+
+    if (!isValidSummaryPeriod(period)) {
+      throw new BadRequestException('Invalid summary period format');
+    }
+
+    if (!isOnOrAfterEarliestSummaryPeriod(period)) {
+      throw new BadRequestException(
+        'Summary periods before 2026-01 are not accepted',
+      );
+    }
+
+    const timezone = await this.getUserTimezone(userId);
+    if (!isEndedSummaryPeriod(period, timezone)) {
+      throw new BadRequestException(
+        'Only ended calendar months can be updated',
+      );
+    }
+
+    const existing = await this.prisma.summaryAnalytics.findUnique({
+      where: {
+        user_id_period: {
+          user_id: userId,
+          period,
+        },
+      },
+    });
+    if (!existing) {
+      throw new NotFoundException('Summary for this period was not found');
+    }
+
+    const payload = parseManualSummaryPayload(input);
+    const row = await this.prisma.summaryAnalytics.update({
+      where: {
+        user_id_period: {
+          user_id: userId,
+          period,
+        },
+      },
+      data: {
+        salary_cents: payload.salaryCents,
+        total_expenses_cents: payload.totalExpensesCents,
+        savings_cents: payload.savingsCents,
+        savings_message: payload.savingsMessage,
+        categories: categoriesToPrismaJson(payload.categories),
+      },
+    });
+
+    return toSummaryAnalyticsRecord(row);
+  }
+
+  private async getUserTimezone(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { summary_timezone: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    return normalizeTimezone(user.summary_timezone);
+  }
+
   private async renderAndSendSummary(
     user: DueUser,
     period: string,
     trigger: AiUsageTrigger,
-  ): Promise<void> {
+  ): Promise<SummaryAnalyticsSnapshot> {
     if (!user.activeTemplate) {
       throw new NotFoundException('Active template not found');
     }
@@ -248,7 +458,7 @@ export class SummaryService {
       throw new BadRequestException('Expense file is empty');
     }
 
-    const summary = await this.aiService.analyzeExpenses(
+    const analysis = await this.aiService.analyzeExpenses(
       user.id,
       rawExpenseContent,
       user.summary_email_language,
@@ -256,7 +466,7 @@ export class SummaryService {
       period,
       trigger,
     );
-    const values = expenseSummaryToTemplateValues(summary, user.email);
+    const values = expenseSummaryToTemplateValues(analysis.summary, user.email);
     const html = applyTemplateValues(user.activeTemplate.content, values);
     const subject = getSummaryEmailSubject(
       user.summary_email_language,
@@ -265,6 +475,7 @@ export class SummaryService {
     );
 
     await this.emailService.sendEmail(user.email, subject, html);
+    return analysis.snapshot;
   }
 
   async processDueSummaries(): Promise<ProcessSummariesResult> {
@@ -401,7 +612,11 @@ export class SummaryService {
     }
 
     try {
-      await this.renderAndSendSummary(user, period, AiUsageTrigger.SCHEDULED);
+      const snapshot = await this.renderAndSendSummary(
+        user,
+        period,
+        AiUsageTrigger.SCHEDULED,
+      );
 
       await this.prisma.summaryLog.upsert({
         where: {
@@ -421,6 +636,8 @@ export class SummaryService {
           sent_at: new Date(),
         },
       });
+
+      await this.insertAnalyticsIfMissing(user.id, period, snapshot);
 
       await this.advanceNextSummaryAt(user.id, user);
       this.logger.log(
@@ -453,6 +670,39 @@ export class SummaryService {
 
       throw error;
     }
+  }
+
+  private async insertAnalyticsIfMissing(
+    userId: string,
+    period: string,
+    snapshot: SummaryAnalyticsSnapshot,
+  ): Promise<void> {
+    const existing = await this.prisma.summaryAnalytics.findUnique({
+      where: {
+        user_id_period: {
+          user_id: userId,
+          period,
+        },
+      },
+    });
+
+    if (existing) {
+      return;
+    }
+
+    await this.prisma.summaryAnalytics.create({
+      data: {
+        user_id: userId,
+        period,
+        source: SummaryAnalyticsSource.SCHEDULED,
+        currency: snapshot.currency,
+        salary_cents: snapshot.salaryCents,
+        total_expenses_cents: snapshot.totalExpensesCents,
+        savings_cents: snapshot.savingsCents,
+        savings_message: snapshot.savingsMessage,
+        categories: categoriesToPrismaJson(snapshot.categories),
+      },
+    });
   }
 
   private async advanceNextSummaryAt(

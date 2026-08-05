@@ -3,11 +3,11 @@ import { Field, InputType } from '@nestjs/graphql';
 @InputType()
 export class UpdateTemplateInput {
   @Field()
-  templateId: string;
+  templateId!: string;
 
   @Field()
-  name: string;
+  name!: string;
 
   @Field()
-  content: string;
+  content!: string;
 }

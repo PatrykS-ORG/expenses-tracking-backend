@@ -34,6 +34,7 @@ Relations:
 - `templates` — owned templates
 - `activeTemplate` — selected template (`ActiveTemplate` relation)
 - `summaryLogs` — history of processed summary periods
+- `summaryAnalytics` — persisted monthly expense analytics snapshots
 - `aiUsageLogs` — AI spend audit entries
 
 ### `SummaryLog`
@@ -50,6 +51,41 @@ Batch processing history and idempotency guard.
 | `sent_at`       | `DateTime`         | Processing timestamp               |
 
 Unique constraint: `(user_id, period)`.
+
+### `SummaryAnalytics`
+
+Queryable monthly expense analytics for the dashboard (separate from email idempotency in `SummaryLog`).
+
+| Field                  | Type                     | Description                                          |
+| ---------------------- | ------------------------ | ---------------------------------------------------- |
+| `id`                   | `String` PK              | Analytics row id                                     |
+| `user_id`              | `String` FK              | Owner id                                             |
+| `period`               | `String`                 | Summary period key, e.g. `2026-05`                   |
+| `source`               | `SummaryAnalyticsSource` | `SCHEDULED` (cron email) or `MANUAL` (user backfill) |
+| `currency`             | `String`                 | Snapshot of report currency at write time            |
+| `salary_cents`         | `Int`                    | Salary in minor units                                |
+| `total_expenses_cents` | `Int`                    | Total expenses in minor units                        |
+| `savings_cents`        | `Int`                    | `salary_cents - total_expenses_cents`                |
+| `savings_message`      | `String?`                | Optional narrative                                   |
+| `categories`           | `Json`                   | Array of canonical category buckets with line items  |
+| `created_at`           | `DateTime`               | First insert timestamp                               |
+| `updated_at`           | `DateTime`               | Last update timestamp (manual edits bump this)       |
+
+Unique constraint: `(user_id, period)`.
+
+`categories` JSON shape (canonical English keys):
+
+```json
+[
+  {
+    "name": "Groceries",
+    "totalCents": 9400,
+    "items": [{ "name": "Kebab", "amountCents": 9400 }]
+  }
+]
+```
+
+Closed category keys: `Bills`, `Groceries`, `DiningOut`, `Transport`, `Education`, `Entertainment`, `Investments`, `Car`, `Clothing`, `Snacks`, `Health`, `Travel`, `Gifts`, `Other`.
 
 ### `Template`
 
@@ -88,6 +124,13 @@ Per-call AI spend audit trail (DeepSeek token usage).
 | `created_at`        | `DateTime`       | Call timestamp                                             |
 
 Index: `(user_id, created_at)`.
+
+### `SummaryAnalyticsSource` enum
+
+| Value       | Meaning                                      |
+| ----------- | -------------------------------------------- |
+| `SCHEDULED` | Inserted after successful cron summary email |
+| `MANUAL`    | User-created historical backfill             |
 
 ### `DataSourceType` enum
 
@@ -153,6 +196,7 @@ erDiagram
   User ||--o{ Template : owns
   User }o--o| Template : activeTemplate
   User ||--o{ SummaryLog : logs
+  User ||--o{ SummaryAnalytics : analytics
   User ||--o{ AiUsageLog : aiUsage
   User {
     string id PK
@@ -184,6 +228,20 @@ erDiagram
     string error_message
     datetime sent_at
   }
+  SummaryAnalytics {
+    string id PK
+    string user_id FK
+    string period
+    string source
+    string currency
+    int salary_cents
+    int total_expenses_cents
+    int savings_cents
+    string savings_message
+    json categories
+    datetime created_at
+    datetime updated_at
+  }
   AiUsageLog {
     string id PK
     string user_id FK
@@ -211,6 +269,7 @@ erDiagram
 | `20260614200000_add_summary_email_language` | Adds `summary_email_language` (`PL` / `EN`) on `User`                                                     |
 | `20260715193600_add_summary_currency`       | Adds the preferred summary report currency (default `PLN`)                                                |
 | `20260801120000_add_ai_usage_tracking`      | Adds `ai_credit_limit` on `User`, `AiUsageLog`, `AiActionType`, and `AiUsageTrigger`                      |
+| `20260805194853_add_summary_analytics`      | Adds `SummaryAnalytics` table and `SummaryAnalyticsSource` enum                                           |
 
 ## Business rules
 
@@ -222,9 +281,14 @@ erDiagram
 - Upload endpoint stores file in Storage and persists source config in `User.data_source_config`.
 - `approveReceiptExpenses` appends approved receipt text to the user's existing `FILE_UPLOAD` expense file (creates content if the file is missing) and updates `uploadedAt` in `data_source_config`. Requires `FILE_UPLOAD` as the active data source.
 - Automatic summaries require `summary_enabled = true`, active template, valid data source config, and a computed `next_summary_at`.
+- After a successful scheduled summary email, the backend inserts a `SummaryAnalytics` row (`source = SCHEDULED`) only when one does not already exist for that `(user_id, period)`. Existing analytics are never overwritten by cron.
+- `sendSummaryNow` sends email only — it does not write `SummaryAnalytics`.
+- Manual analytics create is allowed only for periods older than the previous calendar month in the user's timezone; update/view require an ended month (`period < current YYYY-MM`). Update may rewrite either `SCHEDULED` or `MANUAL` rows; it does not change `source` or currency.
+- Accepted analytics periods start at `2026-01` (earlier months are rejected).
+- Category keys in analytics JSON must belong to the closed vocabulary listed above.
 - Report currency is restricted by the API to `PLN`, `EUR`, `USD`, `GBP`, `CHF`, `CZK`, or `UAH`; it controls AI output formatting and does not perform exchange-rate conversion.
 - AI spend is capped monthly per user (`User.ai_credit_limit`). Credits = `ceil(total_tokens / AI_TOKENS_PER_CREDIT)`. Manual AI actions fail when the budget is exhausted; cron summaries skip those users.
-- `deleteMyAccount` removes the Supabase Auth identity, local profile (including cascaded templates, summary logs, and AI usage logs), and best-effort removes the uploaded expense file.
+- `deleteMyAccount` removes the Supabase Auth identity, local profile (including cascaded templates, summary logs, summary analytics, and AI usage logs), and best-effort removes the uploaded expense file.
 
 See [cron-summaries.md](./cron-summaries.md) for batch processing details.
 

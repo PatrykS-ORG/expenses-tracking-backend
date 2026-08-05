@@ -1,7 +1,10 @@
 import {
   computeNextSummaryAt,
+  getCurrentCalendarPeriod,
   getSummaryPeriod,
   getZonedDateParts,
+  isCreatableSummaryPeriod,
+  isEndedSummaryPeriod,
   normalizeTimezone,
 } from './summary-schedule.util';
 
@@ -31,5 +34,20 @@ describe('summary-schedule.util', () => {
 
   it('falls back to the default timezone for invalid values', () => {
     expect(normalizeTimezone('Invalid/Zone')).toBe('Europe/Warsaw');
+  });
+
+  it('evaluates ended and creatable period gates in user timezone', () => {
+    const at = new Date('2026-04-10T10:00:00.000Z');
+    const timezone = 'Europe/Warsaw';
+
+    expect(getCurrentCalendarPeriod(timezone, at)).toBe('2026-04');
+    expect(getSummaryPeriod(timezone, at)).toBe('2026-03');
+    expect(isEndedSummaryPeriod('2026-03', timezone, at)).toBe(true);
+    expect(isEndedSummaryPeriod('2026-04', timezone, at)).toBe(false);
+    expect(isEndedSummaryPeriod('2025-12', timezone, at)).toBe(false);
+    expect(isCreatableSummaryPeriod('2026-02', timezone, at)).toBe(true);
+    expect(isCreatableSummaryPeriod('2026-01', timezone, at)).toBe(true);
+    expect(isCreatableSummaryPeriod('2025-12', timezone, at)).toBe(false);
+    expect(isCreatableSummaryPeriod('2026-03', timezone, at)).toBe(false);
   });
 });

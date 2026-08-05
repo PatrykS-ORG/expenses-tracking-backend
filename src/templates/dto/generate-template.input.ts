@@ -3,14 +3,14 @@ import { InputType, Field } from '@nestjs/graphql';
 @InputType()
 export class GenerateTemplateInput {
   @Field()
-  tone: string;
+  tone!: string;
 
   @Field()
-  detailLevel: string;
+  detailLevel!: string;
 
   @Field()
-  focus: string;
+  focus!: string;
 
   @Field()
-  visualStyle: string;
+  visualStyle!: string;
 }

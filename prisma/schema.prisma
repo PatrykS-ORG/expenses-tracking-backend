@@ -34,6 +34,11 @@ enum AiUsageTrigger {
   SCHEDULED
 }
 
+enum SummaryAnalyticsSource {
+  SCHEDULED
+  MANUAL
+}
+
 model User {
   id                    String               @id @default(uuid()) // Powinno być synchronizowane z Supabase Auth UID
   email                 String               @unique
@@ -51,6 +56,7 @@ model User {
   created_at            DateTime       @default(now())
   templates             Template[]
   summaryLogs           SummaryLog[]
+  summaryAnalytics      SummaryAnalytics[]
   aiUsageLogs           AiUsageLog[]
 
   // Relacja do aktywnego szablonu
@@ -64,6 +70,26 @@ model SummaryLog {
   status        SummaryLogStatus
   error_message String?
   sent_at       DateTime         @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, period])
+  @@index([user_id])
+}
+
+model SummaryAnalytics {
+  id                    String                 @id @default(uuid())
+  user_id               String
+  period                String
+  source                SummaryAnalyticsSource
+  currency              String
+  salary_cents          Int
+  total_expenses_cents  Int
+  savings_cents         Int
+  savings_message       String?
+  categories            Json
+  created_at            DateTime               @default(now())
+  updated_at            DateTime               @updatedAt
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 

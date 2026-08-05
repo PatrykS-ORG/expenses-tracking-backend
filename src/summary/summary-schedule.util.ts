@@ -145,3 +145,50 @@ export function getSummaryPeriod(
 
   return `${year}-${String(month).padStart(2, '0')}`;
 }
+
+export function getCurrentCalendarPeriod(
+  timezone: string,
+  at: Date = new Date(),
+): string {
+  const parts = getZonedDateParts(at, timezone);
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}`;
+}
+
+const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** Earliest YYYY-MM accepted for analytics view / create / update. */
+export const EARLIEST_SUMMARY_PERIOD = '2026-01';
+
+export function isValidSummaryPeriod(period: string): boolean {
+  return PERIOD_PATTERN.test(period.trim());
+}
+
+export function compareSummaryPeriods(left: string, right: string): number {
+  return left.localeCompare(right);
+}
+
+export function isOnOrAfterEarliestSummaryPeriod(period: string): boolean {
+  return compareSummaryPeriods(period, EARLIEST_SUMMARY_PERIOD) >= 0;
+}
+
+export function isEndedSummaryPeriod(
+  period: string,
+  timezone: string,
+  at: Date = new Date(),
+): boolean {
+  return (
+    isOnOrAfterEarliestSummaryPeriod(period) &&
+    compareSummaryPeriods(period, getCurrentCalendarPeriod(timezone, at)) < 0
+  );
+}
+
+export function isCreatableSummaryPeriod(
+  period: string,
+  timezone: string,
+  at: Date = new Date(),
+): boolean {
+  return (
+    isOnOrAfterEarliestSummaryPeriod(period) &&
+    compareSummaryPeriods(period, getSummaryPeriod(timezone, at)) < 0
+  );
+}

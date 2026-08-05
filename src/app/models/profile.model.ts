@@ -3,7 +3,7 @@ import { Field, ObjectType } from '@nestjs/graphql';
 @ObjectType()
 export class ProfileUser {
   @Field()
-  id: string;
+  id!: string;
 
   @Field({ nullable: true })
   email?: string;
@@ -15,8 +15,8 @@ export class ProfileUser {
 @ObjectType()
 export class Profile {
   @Field()
-  message: string;
+  message!: string;
 
   @Field(() => ProfileUser)
-  user: ProfileUser;
+  user!: ProfileUser;
 }

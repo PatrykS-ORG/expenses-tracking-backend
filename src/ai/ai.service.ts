@@ -12,6 +12,9 @@ import {
   AiCategoryAssignment,
   reconcileExpenseAnalysis,
 } from './expense-analysis.reconciler';
+import { buildCanonicalCategoriesFromExpenses } from '../summary/summary-analytics-canonical.mapper';
+import { CANONICAL_CATEGORY_KEYS } from '../summary/summary-category.constants';
+import { SummaryAnalyticsSnapshot } from '../summary/summary-analytics.types';
 import { formatMoneyAmount } from './expense-amount.formatter';
 import { CanonicalExpense, parseExpenseFile } from './expense-file.parser';
 import { buildExpensesListHtml } from '../email/expenses-list.builder';
@@ -58,11 +61,13 @@ Each category object must contain:
 - itemIds (array of integers — IDs from the provided canonical expense list)
 
 Categorization rules (critical):
-1) Group expenses into 3-8 meaningful parent categories (for example Food, Transport, Bills).
+1) Group expenses into parent categories using ONLY these exact English category names:
+   ${CANONICAL_CATEGORY_KEYS.join(', ')}
 2) Every expense ID from the canonical list MUST appear in exactly one category.itemIds.
 3) Do not invent IDs. Do not omit IDs. Do not duplicate IDs across categories.
 4) Do not invent expenses that are not in the canonical list.
 5) Each category.itemIds must contain at least 1 ID.
+6) Use the English category names exactly as listed above (not translated labels).
 
 savingsMessage rules (critical — do NOT just restate totals):
 1) Name the category that consumed the largest share of salary, with its percentage (use the provided totals).
@@ -74,17 +79,23 @@ savingsMessage rules (critical — do NOT just restate totals):
 
 Formatting rules:
 1) Return JSON only — no markdown, no HTML, no commentary.
-2) Use ONLY the output language specified in the user message for category names and savingsMessage.
+2) Use ONLY the output language specified in the user message for savingsMessage (category names stay English as listed above).
 
 Example shape:
 {
   "userName": "Anna",
-  "savingsMessage": "Największą część wypłaty pochłonęła kategoria Żywność i dom (14,6%). Najdroższy pojedynczy wydatek to Biedronka — zakupy spożywcze — 890,00 zł. Warto przyjrzeć się kategorii Transport — rozważ carpooling lub komunikację miejską w kolejnym miesiącu.",
+  "savingsMessage": "Największą część wypłaty pochłonęła kategoria Groceries (14,6%). Najdroższy pojedynczy wydatek to Biedronka — zakupy spożywcze — 890,00 zł. Warto przyjrzeć się kategorii Transport — rozważ carpooling lub komunikację miejską w kolejnym miesiącu.",
   "categories": [
-    { "name": "Żywność i dom", "itemIds": [1, 2, 3] },
+    { "name": "Groceries", "itemIds": [1, 2, 3] },
     { "name": "Transport", "itemIds": [4, 5] }
   ]
-}`;
+}
+`;
+
+export interface AnalyzeExpensesResult {
+  summary: ExpenseSummary;
+  snapshot: SummaryAnalyticsSnapshot;
+}
 
 const RECEIPT_SCAN_PROMPT = `You are a financial assistant that extracts purchased-item expenses from noisy OCR text of a store receipt.
 Read the OCR text and return ONLY plain text lines in this format:
@@ -298,7 +309,7 @@ export class AiService {
     currency = 'PLN',
     period?: string,
     trigger: AiUsageTrigger = AiUsageTrigger.MANUAL,
-  ): Promise<ExpenseSummary> {
+  ): Promise<AnalyzeExpensesResult> {
     await this.aiUsageService.ensureWithinLimit(userId);
 
     const resolvedLanguage = normalizeSummaryEmailLanguage(language);
@@ -426,19 +437,32 @@ ${canonicalList}`,
       recorded = true;
 
       return {
-        userName: aiResult.userName,
-        currentMonth: formatSummaryMonth(resolvedLanguage, period ?? ''),
-        salaryAmount: reconciled.salaryAmount,
-        totalExpenses: reconciled.totalExpenses,
-        savingsAmount: reconciled.savingsAmount,
-        savingsMessage: aiResult.savingsMessage,
-        expensesList: buildExpensesListHtml(
-          reconciled.categories,
-          reconciled.totalExpenses,
-          totalLabel,
-          reconciled.salaryAmount,
-          listLanguage,
-        ),
+        summary: {
+          userName: aiResult.userName,
+          currentMonth: formatSummaryMonth(resolvedLanguage, period ?? ''),
+          salaryAmount: reconciled.salaryAmount,
+          totalExpenses: reconciled.totalExpenses,
+          savingsAmount: reconciled.savingsAmount,
+          savingsMessage: aiResult.savingsMessage,
+          expensesList: buildExpensesListHtml(
+            reconciled.categories,
+            reconciled.totalExpenses,
+            totalLabel,
+            reconciled.salaryAmount,
+            listLanguage,
+          ),
+        },
+        snapshot: {
+          currency: currency.trim().toUpperCase() || 'PLN',
+          salaryCents: reconciled.salaryCents,
+          totalExpensesCents: reconciled.totalExpensesCents,
+          savingsCents: reconciled.savingsCents,
+          savingsMessage: aiResult.savingsMessage,
+          categories: buildCanonicalCategoriesFromExpenses(
+            parsedFile.expenses,
+            aiResult.categories,
+          ),
+        },
       };
     } catch (error) {
       if (!recorded && (usage.totalTokens > 0 || usage.promptTokens > 0)) {

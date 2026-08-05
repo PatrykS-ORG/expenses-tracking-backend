@@ -8,7 +8,7 @@ Automated expense summary emails are triggered by a single external scheduler an
 flowchart LR
   CronSidecar[expenses-summary-cron] -->|"POST Bearer CRON_SECRET"| Webhook["/api/cron/process-summaries"]
   Webhook --> SummaryService
-  SummaryService --> DB[(User + SummaryLog)]
+  SummaryService --> DB[(User + SummaryLog + SummaryAnalytics)]
   SummaryService --> Storage[(Supabase Storage)]
   SummaryService --> AI[DeepSeek]
   SummaryService --> Brevo[Brevo SMTP API]
@@ -37,12 +37,13 @@ For each due user:
 
 1. Skip if the user has no remaining AI credits (`AiUsageService.hasRemainingCredits`) — outcome `skipped` with reason `AI credit limit reached`.
 2. Resolve expense file through `DataSourceResolverService` (`FILE_UPLOAD` or `NEXTCLOUD`).
-3. Analyze content with `AiService.analyzeExpenses(..., trigger: SCHEDULED)`, passing the user's `summary_email_language` (`PL` / `EN`), `summary_currency`, and the resolved `period` (`YYYY-MM`). Amounts/totals are computed deterministically from the parsed file and only cross-checked against the AI's categorization — see [Expense analysis flow](./architecture.md#expense-analysis-flow). Token usage is audited as `EXPENSE_SUMMARY` / `SCHEDULED`.
+3. Analyze content with `AiService.analyzeExpenses(..., trigger: SCHEDULED)`, passing the user's `summary_email_language` (`PL` / `EN`), `summary_currency`, and the resolved `period` (`YYYY-MM`). Returns `{ summary, snapshot }` — amounts/totals are computed deterministically from the parsed file and only cross-checked against the AI's categorization — see [Expense analysis flow](./architecture.md#expense-analysis-flow). Token usage is audited as `EXPENSE_SUMMARY` / `SCHEDULED`.
 4. Map the reconciled categories to an HTML expense table via `buildExpensesListHtml()`, then inject placeholders into the active template.
 5. Render active HTML template with `applyTemplateValues()`.
 6. Send email to `User.email` through `EmailService`.
 7. Upsert `SummaryLog` with period key `YYYY-MM` (previous calendar month in user timezone).
-8. Advance `next_summary_at` to the next scheduled occurrence.
+8. Insert `SummaryAnalytics` (`source = SCHEDULED`) from the analysis `snapshot` only when no row exists for `(user_id, period)` — never overwrite existing analytics.
+9. Advance `next_summary_at` to the next scheduled occurrence.
 
 On failure:
 
@@ -67,14 +68,17 @@ Stored on `User`:
 
 The authenticated `sendSummaryNow` GraphQL mutation runs the same data-source,
 AI analysis, template rendering, and email delivery steps immediately (trigger
-`MANUAL`). It sends to the account email but does not create a `SummaryLog` or
-change `next_summary_at`. When the user's monthly AI credit limit is reached,
-the mutation fails with a clear `BadRequestException`.
+`MANUAL`). It sends to the account email but does not create a `SummaryLog`,
+write `SummaryAnalytics`, or change `next_summary_at`. When the user's monthly
+AI credit limit is reached, the mutation fails with a clear `BadRequestException`.
 
-Users manage these settings through GraphQL:
+Users manage schedule settings through GraphQL:
 
 - Query: `mySummarySchedule`
 - Mutation: `updateSummarySchedule`
+
+Dashboard analytics (list / read / manual backfill) are separate GraphQL
+operations on `SummaryResolver` — see [Summary analytics flow](./architecture.md#summary-analytics-flow).
 
 ## Docker production setup
 
@@ -109,15 +113,18 @@ If a successful log already exists for the current period, the service advances 
 
 ## Related code
 
-| Area                  | Path                                    |
-| --------------------- | --------------------------------------- |
-| Batch service         | `src/summary/summary.service.ts`        |
-| Schedule math         | `src/summary/summary-schedule.util.ts`  |
-| REST controller       | `src/cron/cron.controller.ts`           |
-| Cron auth guard       | `src/cron/cron-auth.guard.ts`           |
-| GraphQL schedule API  | `src/summary/summary.resolver.ts`       |
-| Expense file parsing  | `src/ai/expense-file.parser.ts`         |
-| Amount reconciliation | `src/ai/expense-analysis.reconciler.ts` |
-| Money formatting      | `src/ai/expense-amount.formatter.ts`    |
+| Area                             | Path                                                |
+| -------------------------------- | --------------------------------------------------- |
+| Batch service                    | `src/summary/summary.service.ts`                    |
+| Schedule / period gates          | `src/summary/summary-schedule.util.ts`              |
+| REST controller                  | `src/cron/cron.controller.ts`                       |
+| Cron auth guard                  | `src/cron/cron-auth.guard.ts`                       |
+| GraphQL schedule + analytics API | `src/summary/summary.resolver.ts`                   |
+| Canonical categories             | `src/summary/summary-category.constants.ts`         |
+| Analytics snapshot map           | `src/summary/summary-analytics-canonical.mapper.ts` |
+| Manual input parser              | `src/summary/summary-manual-input.parser.ts`        |
+| Expense file parsing             | `src/ai/expense-file.parser.ts`                     |
+| Amount reconciliation            | `src/ai/expense-analysis.reconciler.ts`             |
+| Money formatting                 | `src/ai/expense-amount.formatter.ts`                |
 
 See also [database.md](./database.md) and [architecture.md](./architecture.md).

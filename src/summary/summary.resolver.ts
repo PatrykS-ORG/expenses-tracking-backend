@@ -5,6 +5,12 @@ import {
   SummarySchedule,
   UpdateSummaryScheduleInput,
 } from './models/summary-schedule.model';
+import {
+  CreateManualSummaryInput,
+  SummaryAnalyticsModel,
+  UpdateManualSummaryInput,
+} from './models/summary-analytics.model';
+import { toSummaryAnalyticsModel } from './summary-analytics.mapper';
 import { toSummaryEmailLanguageEnum } from './models/summary-email-language.enum';
 import { GqlAuthGuard } from '../auth/gql-auth.guard';
 import { CurrentUserGql } from '../auth/current-user.graphql.decorator';
@@ -65,5 +71,65 @@ export class SummaryResolver {
   @Mutation(() => Boolean)
   sendSummaryNow(@CurrentUserGql() user: AuthenticatedUser): Promise<boolean> {
     return this.summaryService.sendSummaryNow(extractUserId(user), user.email);
+  }
+
+  @UseGuards(GqlAuthGuard)
+  @Query(() => [SummaryAnalyticsModel])
+  async mySummaries(
+    @CurrentUserGql() user: AuthenticatedUser,
+  ): Promise<SummaryAnalyticsModel[]> {
+    const rows = await this.summaryService.getMySummaries(
+      extractUserId(user),
+      user.email,
+    );
+    return rows.map(toSummaryAnalyticsModel);
+  }
+
+  @UseGuards(GqlAuthGuard)
+  @Query(() => SummaryAnalyticsModel, { nullable: true })
+  async mySummary(
+    @CurrentUserGql() user: AuthenticatedUser,
+    @Args('month') month: string,
+  ): Promise<SummaryAnalyticsModel | null> {
+    const row = await this.summaryService.getMySummary(
+      extractUserId(user),
+      month,
+      user.email,
+    );
+    return row ? toSummaryAnalyticsModel(row) : null;
+  }
+
+  @UseGuards(GqlAuthGuard)
+  @Query(() => [String])
+  summaryCategoryKeys(): string[] {
+    return [...this.summaryService.getSummaryCategoryKeys()];
+  }
+
+  @UseGuards(GqlAuthGuard)
+  @Mutation(() => SummaryAnalyticsModel)
+  async createManualSummary(
+    @CurrentUserGql() user: AuthenticatedUser,
+    @Args('input') input: CreateManualSummaryInput,
+  ): Promise<SummaryAnalyticsModel> {
+    const row = await this.summaryService.createManualSummary(
+      extractUserId(user),
+      user.email,
+      input,
+    );
+    return toSummaryAnalyticsModel(row);
+  }
+
+  @UseGuards(GqlAuthGuard)
+  @Mutation(() => SummaryAnalyticsModel)
+  async updateManualSummary(
+    @CurrentUserGql() user: AuthenticatedUser,
+    @Args('input') input: UpdateManualSummaryInput,
+  ): Promise<SummaryAnalyticsModel> {
+    const row = await this.summaryService.updateManualSummary(
+      extractUserId(user),
+      user.email,
+      input,
+    );
+    return toSummaryAnalyticsModel(row);
   }
 }

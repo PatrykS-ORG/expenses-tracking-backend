@@ -35,6 +35,7 @@ alwaysApply: true
 
 ## AI / DeepSeek integration
 - Never trust the LLM to compute or return sums, totals, or amounts. Parse/merge raw input deterministically in code (see `src/ai/expense-file.parser.ts`), ask the LLM only for categorization/narrative text (`itemIds`, `savingsMessage`), then reconcile amounts back from the canonical parsed data (`src/ai/expense-analysis.reconciler.ts`).
+- Category names for expense analysis and `SummaryAnalytics` must use the closed English vocabulary in `src/summary/summary-category.constants.ts` (normalize aliases via `normalizeCategoryName`; do not invent free-form category labels in persisted JSON).
 - Format money via `src/ai/expense-amount.formatter.ts`, not ad-hoc `toLocaleString` calls, so PL/EN formatting stays consistent.
 
 ## Code style

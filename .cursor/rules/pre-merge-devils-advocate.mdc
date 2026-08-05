@@ -1,0 +1,13 @@
+---
+alwaysApply: true
+---
+
+- When I signal intent to merge the current branch into `environment/develop`, open a Pull Request targeting `environment/develop`, or say the branch is "ready" / "ready to merge" / "ready for PR" — BEFORE running `git push`, creating a PR (e.g. `gh pr create`), or suggesting a merge, run the review defined in `.cursor/prompts/SHARED-pre-merge-devils-advocate.md`.
+- **Exception — emergency fast lane:** if the current branch name starts with `hotfix/` and I say this is an urgent production fix, use `.cursor/prompts/SHARED-pre-merge-devils-advocate-emergency.md` instead. This is NOT a way to skip the review — it still requires my conscious, written answer to one risk question and a recorded commitment to a full retroactive review within 48h. Do not suggest this lane yourself for branches that don't start with `hotfix/`.
+- Do not create a Pull Request or merge into `environment/develop` until the appropriate review (full or emergency) has been completed and saved under `.cursor/plans/documentation/pre-merge-reviews/`.
+- If the review surfaces 🔴 Blocking findings, tell me and ask whether I want to fix them before continuing, or knowingly accept the risk — in the latter case, require my explicit confirmation and record it in the report.
+- This rule does NOT apply to `10xdev/*` branches or PRs targeting `environment/10xdev` or `main` — it only applies to merges/PRs targeting `environment/develop`.
+- Do not offer to skip the review outside of the emergency lane described above. If I ask to skip it for a reason other than a genuine hotfix, remind me of the available `hotfix/*` lane instead of just skipping — CI requires a report (full or emergency) for every PR targeting `environment/develop` regardless of what happens in chat.
+---
+alwaysApply: true
+---

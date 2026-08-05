@@ -4,7 +4,7 @@ NestJS 11 API for **ExpenseAI**.
 Current scope includes:
 
 - Supabase JWT auth (GraphQL guards)
-- Prisma persistence (`User`, `Template`, `SummaryLog`, `AiUsageLog`)
+- Prisma persistence (`User`, `Template`, `SummaryLog`, `SummaryAnalytics`, `AiUsageLog`)
 - AI template generation and expense analysis (DeepSeek)
 - Monthly AI credit limits + spend audit (`AiUsageModule`)
 - Data-source abstraction (`FILE_UPLOAD` via Supabase Storage, `NEXTCLOUD` via WebDAV)
@@ -12,6 +12,7 @@ Current scope includes:
 - Receipt expense approval (append to uploaded expense file)
 - Test-email sending through Brevo API
 - Monthly summary cron webhook (`/api/cron/process-summaries`)
+- Monthly expense analytics GraphQL (scheduled snapshots + manual historical backfill)
 
 ## Prerequisites
 
@@ -49,7 +50,7 @@ src/
 ├── templates/               # GraphQL templates + settings + test-email mutation
 ├── data-sources/            # GraphQL upload queries/mutations + source providers
 ├── receipts/                # Receipt scan + approveReceiptExpenses GraphQL mutations + OCR
-├── summary/                 # Summary schedule GraphQL + batch pipeline
+├── summary/                 # Summary schedule + analytics GraphQL + batch pipeline
 ├── cron/                    # Secured REST webhook for hourly summaries
 ├── email/                   # Brevo client + HTML template rendering helper
 ├── users/                   # Profile provisioning + account deletion
@@ -73,7 +74,8 @@ prisma/
 - Data-source provider pattern in `src/data-sources/providers/` allows new connectors later.
 - Email sending uses Brevo HTTP endpoint (`/smtp/email`) through `EmailService`.
 - Prisma adapter strips SSL URL params and applies explicit TLS option from env.
-- Expense analysis math is deterministic, not AI-generated: `src/ai/expense-file.parser.ts` parses/merges raw expense text into canonical cents, `src/ai/expense-analysis.reconciler.ts` rebuilds totals from that canonical data, and `src/ai/expense-amount.formatter.ts` formats it. DeepSeek only assigns category `itemIds` and writes `savingsMessage` — it never returns amounts, totals, or the month.
+- Expense analysis math is deterministic, not AI-generated: `src/ai/expense-file.parser.ts` parses/merges raw expense text into canonical cents, `src/ai/expense-analysis.reconciler.ts` rebuilds totals from that canonical data, and `src/ai/expense-amount.formatter.ts` formats it. DeepSeek only assigns category `itemIds` (closed English keys from `src/summary/summary-category.constants.ts`) and writes `savingsMessage` — it never returns amounts, totals, or the month.
+- Monthly dashboard analytics are stored in `SummaryAnalytics` (one row per user/period). Cron inserts `SCHEDULED` snapshots only when missing; `sendSummaryNow` does not write analytics. Manual create/update uses the same closed category vocabulary.
 - Every DeepSeek call is credit-gated and audited via `AiUsageService` (`AiUsageLog`). Credits = `ceil(tokens / AI_TOKENS_PER_CREDIT)`. Manual calls error when over limit; cron summaries skip over-limit users.
 
 ## Environment variables (high-level)

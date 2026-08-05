@@ -3,17 +3,17 @@ import { ObjectType, Field, ID } from '@nestjs/graphql';
 @ObjectType()
 export class Template {
   @Field(() => ID)
-  id: string;
+  id!: string;
 
   @Field()
-  user_id: string;
+  user_id!: string;
 
   @Field()
-  name: string;
+  name!: string;
 
   @Field()
-  content: string;
+  content!: string;
 
   @Field()
-  created_at: Date;
+  created_at!: Date;
 }

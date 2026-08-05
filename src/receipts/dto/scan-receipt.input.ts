@@ -3,11 +3,11 @@ import { Field, InputType } from '@nestjs/graphql';
 @InputType()
 export class ScanReceiptInput {
   @Field()
-  fileName: string;
+  fileName!: string;
 
   @Field()
-  mimeType: string;
+  mimeType!: string;
 
   @Field()
-  contentBase64: string;
+  contentBase64!: string;
 }

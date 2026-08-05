@@ -4,13 +4,13 @@ import { DataSourceTypeEnum } from '../../templates/models/data-source-type.enum
 @ObjectType()
 export class UploadedExpenseFile {
   @Field(() => DataSourceTypeEnum)
-  dataSourceType: DataSourceTypeEnum;
+  dataSourceType!: DataSourceTypeEnum;
 
   @Field()
-  uploadedFilePath: string;
+  uploadedFilePath!: string;
 
   @Field()
-  bucket: string;
+  bucket!: string;
 
   @Field({ nullable: true })
   uploadedAt?: string;
@@ -22,5 +22,5 @@ export class UploadedExpenseFile {
 @ObjectType()
 export class CurrentExpenseFile extends UploadedExpenseFile {
   @Field()
-  content: string;
+  content!: string;
 }

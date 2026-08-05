@@ -3,8 +3,8 @@ import { Field, InputType } from '@nestjs/graphql';
 @InputType()
 export class CreateTemplateInput {
   @Field()
-  name: string;
+  name!: string;
 
   @Field()
-  content: string;
+  content!: string;
 }

@@ -4,44 +4,44 @@ import { SummaryEmailLanguageEnum } from './summary-email-language.enum';
 @ObjectType()
 export class SummarySchedule {
   @Field()
-  enabled: boolean;
+  enabled!: boolean;
 
   @Field(() => Int)
-  scheduleDay: number;
+  scheduleDay!: number;
 
   @Field(() => Int)
-  scheduleHour: number;
+  scheduleHour!: number;
 
   @Field()
-  timezone: string;
+  timezone!: string;
 
   @Field(() => SummaryEmailLanguageEnum)
-  emailLanguage: SummaryEmailLanguageEnum;
+  emailLanguage!: SummaryEmailLanguageEnum;
 
   @Field()
-  currency: string;
+  currency!: string;
 
   @Field(() => Date, { nullable: true })
-  nextSummaryAt: Date | null;
+  nextSummaryAt!: Date | null;
 }
 
 @InputType()
 export class UpdateSummaryScheduleInput {
   @Field()
-  enabled: boolean;
+  enabled!: boolean;
 
   @Field(() => Int)
-  scheduleDay: number;
+  scheduleDay!: number;
 
   @Field(() => Int)
-  scheduleHour: number;
+  scheduleHour!: number;
 
   @Field()
-  timezone: string;
+  timezone!: string;
 
   @Field(() => SummaryEmailLanguageEnum)
-  emailLanguage: SummaryEmailLanguageEnum;
+  emailLanguage!: SummaryEmailLanguageEnum;
 
   @Field()
-  currency: string;
+  currency!: string;
 }

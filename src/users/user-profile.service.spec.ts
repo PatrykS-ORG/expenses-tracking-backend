@@ -1,8 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { InternalServerErrorException } from '@nestjs/common';
+import {
+  ConflictException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { UserProfileService } from './user-profile.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '../generated/prisma/client';
 import axios from 'axios';
 
 jest.mock('axios');
@@ -65,6 +69,42 @@ describe('UserProfileService', () => {
       },
       update: { email: 'user@example.com' },
     });
+  });
+
+  it('treats concurrent first-login email conflicts as success when profile exists', async () => {
+    prismaMock.user.upsert.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed on the fields: (`email`)',
+        { code: 'P2002', clientVersion: '7.8.0' },
+      ),
+    );
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'oauth-user-1',
+      email: 'user@example.com',
+    });
+
+    await expect(
+      service.ensureUserProfile('oauth-user-1', 'user@example.com'),
+    ).resolves.toBeUndefined();
+
+    expect(prismaMock.user.findUnique).toHaveBeenCalledWith({
+      where: { id: 'oauth-user-1' },
+      select: { id: true, email: true },
+    });
+  });
+
+  it('rejects email conflicts that belong to another auth user', async () => {
+    prismaMock.user.upsert.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed on the fields: (`email`)',
+        { code: 'P2002', clientVersion: '7.8.0' },
+      ),
+    );
+    prismaMock.user.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.ensureUserProfile('oauth-user-1', 'user@example.com'),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('deletes the auth user and local profile', async () => {

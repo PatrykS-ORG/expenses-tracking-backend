@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -7,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
-import { DataSourceType } from '../generated/prisma/client';
+import { DataSourceType, Prisma } from '../generated/prisma/client';
 import { parseFileUploadConfig } from '../data-sources/data-source.types';
 import {
   AI_MONTHLY_CREDIT_LIMIT_ENV,
@@ -26,15 +27,39 @@ export class UserProfileService {
   async ensureUserProfile(userId: string, email?: string): Promise<void> {
     const resolvedEmail = email?.trim() || `${userId}@users.expenseai.local`;
 
-    await this.prisma.user.upsert({
-      where: { id: userId },
-      create: {
-        id: userId,
-        email: resolvedEmail,
-        ai_credit_limit: this.getDefaultMonthlyCreditLimit(),
-      },
-      update: email ? { email: resolvedEmail } : {},
-    });
+    try {
+      await this.prisma.user.upsert({
+        where: { id: userId },
+        create: {
+          id: userId,
+          email: resolvedEmail,
+          ai_credit_limit: this.getDefaultMonthlyCreditLimit(),
+        },
+        update: email ? { email: resolvedEmail } : {},
+      });
+    } catch (error) {
+      // First login often fans out several GraphQL queries; parallel upserts for a
+      // brand-new user race on the email unique index after one insert succeeds.
+      if (
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== 'P2002'
+      ) {
+        throw error;
+      }
+
+      const existing = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true },
+      });
+      if (existing && (!email || existing.email === resolvedEmail)) {
+        return;
+      }
+
+      this.logger.error(
+        `Cannot provision user ${userId}: email unique constraint still conflicted`,
+      );
+      throw new ConflictException('A profile with this email already exists');
+    }
   }
 
   private getDefaultMonthlyCreditLimit(): number {

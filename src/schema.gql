@@ -108,6 +108,7 @@ type Mutation {
   setActiveTemplate(templateId: String!): Boolean!
   updateDataSource(input: UpdateDataSourceInput!): Boolean!
   updateManualSummary(input: UpdateManualSummaryInput!): SummaryAnalyticsModel!
+  updateSalary(salaryAmount: String!): Int!
   updateSummarySchedule(input: UpdateSummaryScheduleInput!): SummarySchedule!
   updateTemplate(input: UpdateTemplateInput!): Template!
   uploadExpenseFile(input: ExpenseFileUploadInput!): UploadedExpenseFile!
@@ -209,6 +210,7 @@ type TemplateSettings {
   active_template_id: String
   data_source_type: DataSourceType!
   nextcloud_file_path: String
+  salary_cents: Int
   uploaded_file_path: String
 }
 

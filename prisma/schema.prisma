@@ -52,6 +52,7 @@ model User {
   summary_currency      String               @default("PLN")
   summary_enabled       Boolean              @default(false)
   next_summary_at       DateTime?
+  salary_cents          Int?
   ai_credit_limit       Int                  @default(50)
   created_at            DateTime       @default(now())
   templates             Template[]

@@ -129,9 +129,10 @@ describe('SummaryService', () => {
       summary_email_language: 'EN',
       summary_currency: 'EUR',
       summary_timezone: 'Europe/Warsaw',
+      salary_cents: 300_000,
     });
     dataSourceResolverMock.fetchExpenseContent.mockResolvedValue(
-      'Salary: 3000 EUR\nGroceries: 100 EUR',
+      'Groceries: 100 EUR',
     );
     aiServiceMock.analyzeExpenses.mockResolvedValue({
       summary: {
@@ -159,7 +160,8 @@ describe('SummaryService', () => {
 
     expect(aiServiceMock.analyzeExpenses).toHaveBeenCalledWith(
       'user-1',
-      'Salary: 3000 EUR\nGroceries: 100 EUR',
+      'Groceries: 100 EUR',
+      300_000,
       'EN',
       'EUR',
       '2026-07',
@@ -171,5 +173,41 @@ describe('SummaryService', () => {
       '<p>100.00 EUR</p>',
     );
     expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects send now when salary is missing', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      data_source_type: 'FILE_UPLOAD',
+      data_source_config: { bucket: 'expenses', filePath: 'user-1/file.txt' },
+      active_template_id: 'template-1',
+      activeTemplate: { content: '<p>{{ totalExpenses }}</p>' },
+      summary_email_language: 'EN',
+      summary_currency: 'EUR',
+      summary_timezone: 'Europe/Warsaw',
+      salary_cents: null,
+    });
+
+    await expect(
+      service.sendSummaryNow('user-1', 'user@example.com'),
+    ).rejects.toThrow('Set a positive salary before enabling summary emails');
+
+    expect(aiServiceMock.analyzeExpenses).not.toHaveBeenCalled();
+  });
+
+  it('persists salary on the user profile', async () => {
+    userProfileServiceMock.ensureUserProfile.mockResolvedValue(undefined);
+    prismaMock.user.update.mockResolvedValue({ salary_cents: 650_000 });
+
+    await expect(
+      service.updateSalary('user-1', 'user@example.com', '6500'),
+    ).resolves.toBe(650_000);
+
+    expect(prismaMock.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: { salary_cents: 650_000 },
+      select: { salary_cents: true },
+    });
   });
 });

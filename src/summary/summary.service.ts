@@ -52,7 +52,10 @@ import {
   CreateManualSummaryInput,
   UpdateManualSummaryInput,
 } from './models/summary-analytics.model';
-import { parseManualSummaryPayload } from './summary-manual-input.parser';
+import {
+  parseManualSummaryPayload,
+  parseMoneyToCents,
+} from './summary-manual-input.parser';
 import { CANONICAL_CATEGORY_KEYS } from './summary-category.constants';
 
 type DueUser = User & {
@@ -183,6 +186,7 @@ export class SummaryService {
         active_template_id: true,
         data_source_config: true,
         data_source_type: true,
+        salary_cents: true,
       },
     });
 
@@ -233,6 +237,26 @@ export class SummaryService {
       currency: updated.summary_currency,
       next_summary_at: updated.next_summary_at,
     };
+  }
+
+  async updateSalary(
+    userId: string,
+    userEmail: string | undefined,
+    salaryAmount: string,
+  ): Promise<number> {
+    await this.userProfileService.ensureUserProfile(userId, userEmail);
+    const salaryCents = parseMoneyToCents(salaryAmount, 'salaryAmount');
+    if (salaryCents <= 0) {
+      throw new BadRequestException('Salary must be greater than zero');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { salary_cents: salaryCents },
+      select: { salary_cents: true },
+    });
+
+    return updated.salary_cents ?? salaryCents;
   }
 
   async sendSummaryNow(userId: string, userEmail?: string): Promise<boolean> {
@@ -331,7 +355,7 @@ export class SummaryService {
     const timezone = await this.getUserTimezone(userId);
     if (!isCreatableSummaryPeriod(period, timezone)) {
       throw new BadRequestException(
-        'Manual summaries can only be created for months older than the previous calendar month',
+        'Manual summaries can only be created for ended calendar months',
       );
     }
 
@@ -458,9 +482,16 @@ export class SummaryService {
       throw new BadRequestException('Expense file is empty');
     }
 
+    if (user.salary_cents == null || user.salary_cents <= 0) {
+      throw new BadRequestException(
+        'Set a positive salary before generating a summary',
+      );
+    }
+
     const analysis = await this.aiService.analyzeExpenses(
       user.id,
       rawExpenseContent,
+      user.salary_cents,
       user.summary_email_language,
       user.summary_currency,
       period,
@@ -512,6 +543,21 @@ export class SummaryService {
           email: user.email,
           action: 'skipped',
           reason: 'invalid or missing data source config',
+        };
+        result.outcomes.push(outcome);
+        this.logger.warn(
+          `Skipping user ${user.id} (${user.email}): ${outcome.reason}`,
+        );
+        continue;
+      }
+
+      if (user.salary_cents == null || user.salary_cents <= 0) {
+        result.skipped += 1;
+        const outcome: SummaryProcessOutcome = {
+          userId: user.id,
+          email: user.email,
+          action: 'skipped',
+          reason: 'missing or invalid salary',
         };
         result.outcomes.push(outcome);
         this.logger.warn(
@@ -746,6 +792,7 @@ export class SummaryService {
     active_template_id: string | null;
     data_source_config: User['data_source_config'];
     data_source_type: User['data_source_type'];
+    salary_cents?: number | null;
   }): void {
     if (!user.active_template_id) {
       throw new BadRequestException(
@@ -756,6 +803,12 @@ export class SummaryService {
     if (!this.hasValidDataSourceConfig(user as User)) {
       throw new BadRequestException(
         'Configure a valid expense data source before enabling summary emails',
+      );
+    }
+
+    if (user.salary_cents == null || user.salary_cents <= 0) {
+      throw new BadRequestException(
+        'Set a positive salary before enabling summary emails',
       );
     }
   }

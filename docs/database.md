@@ -26,6 +26,7 @@ Application profile linked to Supabase Auth (`User.id` should match JWT `sub`).
 | `summary_currency`       | `String`               | Report currency (default `PLN`)                          |
 | `summary_enabled`        | `Boolean`              | Whether user receives automatic summaries                |
 | `next_summary_at`        | `DateTime?`            | Next planned send timestamp (UTC)                        |
+| `salary_cents`           | `Int?`                 | Current salary/income in minor units (required for send) |
 | `ai_credit_limit`        | `Int`                  | Monthly AI credit budget (default `50`)                  |
 | `created_at`             | `DateTime`             | Profile creation timestamp                               |
 
@@ -210,6 +211,7 @@ erDiagram
     string summary_currency
     boolean summary_enabled
     datetime next_summary_at
+    int salary_cents
     int ai_credit_limit
     datetime created_at
   }
@@ -283,7 +285,7 @@ erDiagram
 - Automatic summaries require `summary_enabled = true`, active template, valid data source config, and a computed `next_summary_at`.
 - After a successful scheduled summary email, the backend inserts a `SummaryAnalytics` row (`source = SCHEDULED`) only when one does not already exist for that `(user_id, period)`. Existing analytics are never overwritten by cron.
 - `sendSummaryNow` sends email only — it does not write `SummaryAnalytics`.
-- Manual analytics create is allowed only for periods older than the previous calendar month in the user's timezone; update/view require an ended month (`period < current YYYY-MM`). Update may rewrite either `SCHEDULED` or `MANUAL` rows; it does not change `source` or currency.
+- Manual analytics create/update/view require an ended month (`period < current YYYY-MM` in the user's timezone). Once the new month has started, the previous month can be created manually. Update may rewrite either `SCHEDULED` or `MANUAL` rows; it does not change `source` or currency.
 - Accepted analytics periods start at `2026-01` (earlier months are rejected).
 - Category keys in analytics JSON must belong to the closed vocabulary listed above.
 - Report currency is restricted by the API to `PLN`, `EUR`, `USD`, `GBP`, `CHF`, `CZK`, or `UAH`; it controls AI output formatting and does not perform exchange-rate conversion.

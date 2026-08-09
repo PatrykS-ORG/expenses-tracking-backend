@@ -182,13 +182,15 @@ export function isEndedSummaryPeriod(
   );
 }
 
+/**
+ * Manual create is allowed for any ended calendar month in the user's timezone
+ * (including the previous month once the new month has started). Cron never
+ * overwrites an existing SummaryAnalytics row for the same period.
+ */
 export function isCreatableSummaryPeriod(
   period: string,
   timezone: string,
   at: Date = new Date(),
 ): boolean {
-  return (
-    isOnOrAfterEarliestSummaryPeriod(period) &&
-    compareSummaryPeriods(period, getSummaryPeriod(timezone, at)) < 0
-  );
+  return isEndedSummaryPeriod(period, timezone, at);
 }

@@ -28,9 +28,8 @@ describe('expense-amount.formatter', () => {
 });
 
 describe('parseExpenseFile', () => {
-  it('parses salary, merges duplicates, and keeps distinct names separate', () => {
+  it('merges duplicates and keeps distinct names separate', () => {
     const parsed = parseExpenseFile(`
-Wypłata: 6700zł
 - kebab 28zł
 - kebab 41zł
 - McDonald 15zł
@@ -40,7 +39,6 @@ Wypłata: 6700zł
 - Biedronka 10,41zł
 `);
 
-    expect(parsed.salaryCents).toBe(670_000);
     expect(parsed.expenses).toEqual([
       { id: 1, name: 'kebab', amountCents: 6900 },
       { id: 2, name: 'McDonald', amountCents: 3100 },
@@ -55,15 +53,25 @@ Wypłata: 6700zł
 
   it('supports mixed separators and currency suffixes', () => {
     const parsed = parseExpenseFile(`
-pensja 6500
 Internet 24,50zł
 Prąd 93.5zl
 HBO 14.95
 `);
 
-    expect(parsed.salaryCents).toBe(650_000);
     expect(parsed.expenses.map((e) => e.amountCents)).toEqual([
       2450, 9350, 1495,
+    ]);
+  });
+
+  it('treats leftover salary-labeled lines as regular expenses', () => {
+    const parsed = parseExpenseFile(`
+Wypłata: 6700zł
+Groceries 100zł
+`);
+
+    expect(parsed.expenses).toEqual([
+      { id: 1, name: 'Wypłata', amountCents: 670_000 },
+      { id: 2, name: 'Groceries', amountCents: 10_000 },
     ]);
   });
 });

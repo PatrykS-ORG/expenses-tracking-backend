@@ -146,35 +146,36 @@ Expense data source is resolved per user from:
 
 All client-facing operations are exposed through GraphQL at `/graphql`.
 
-| Kind     | Name                          | Auth   | Notes                                                                                           |
-| -------- | ----------------------------- | ------ | ----------------------------------------------------------------------------------------------- |
-| Query    | `health`                      | Public | Health/hello smoke check                                                                        |
-| Query    | `myProfile`                   | JWT    | Auth smoke test                                                                                 |
-| Query    | `myTemplates`                 | JWT    | List current user templates                                                                     |
-| Query    | `myTemplateSettings`          | JWT    | Active template + source settings                                                               |
-| Query    | `currentExpenseFile`          | JWT    | Current uploaded file metadata + content                                                        |
-| Mutation | `generateTemplate`            | JWT    | Generate template via DeepSeek                                                                  |
-| Mutation | `createTemplate`              | JWT    | Create template                                                                                 |
-| Mutation | `updateTemplate`              | JWT    | Update template                                                                                 |
-| Mutation | `deleteTemplate`              | JWT    | Delete template                                                                                 |
-| Mutation | `setActiveTemplate`           | JWT    | Set active template                                                                             |
-| Mutation | `updateDataSource`            | JWT    | Switch/update source config                                                                     |
-| Mutation | `uploadExpenseFile`           | JWT    | Upload `.txt/.csv` (max 5MB, base64), set source to `FILE_UPLOAD`                               |
-| Mutation | `overwriteCurrentExpenseFile` | JWT    | Overwrite currently configured uploaded file (base64)                                           |
-| Mutation | `sendTestEmail`               | JWT    | Render active template with sample values and send via Brevo                                    |
-| Query    | `mySummarySchedule`           | JWT    | Read automatic summary schedule settings                                                        |
-| Mutation | `updateSummarySchedule`       | JWT    | Update schedule and recalculate `next_summary_at`                                               |
-| Mutation | `sendSummaryNow`              | JWT    | Analyze the current expense file and email a real summary without changing schedule             |
-| Query    | `mySummaries`                 | JWT    | List persisted monthly analytics for ended months (`period < current YYYY-MM`)                  |
-| Query    | `mySummary(month)`            | JWT    | Single-month analytics (`null` if current/future or missing); months before `2026-01` rejected  |
-| Query    | `summaryCategoryKeys`         | JWT    | Closed English category vocabulary for manual backfill UI                                       |
-| Mutation | `createManualSummary`         | JWT    | Create historical analytics (`source = MANUAL`); only months older than previous calendar month |
-| Mutation | `updateManualSummary`         | JWT    | Update an existing analytics row for an ended month (scheduled or manual)                       |
-| Mutation | `deleteMyAccount`             | JWT    | Delete Supabase Auth identity, profile data, and uploaded expense file                          |
-| Mutation | `scanReceipt`                 | JWT    | Upload receipt image (JPEG/PNG/WEBP, max 5MB, base64); returns `{ extractedText }`              |
-| Mutation | `approveReceiptExpenses`      | JWT    | Append edited receipt expense text to the user's uploaded expense file                          |
-| Query    | `myAiUsageSummary`            | JWT    | Current-month AI credit limit / used / remaining                                                |
-| Query    | `myAiUsageLog`                | JWT    | Paginated AI spend audit (`limit`, `offset`)                                                    |
+| Kind     | Name                          | Auth   | Notes                                                                                            |
+| -------- | ----------------------------- | ------ | ------------------------------------------------------------------------------------------------ |
+| Query    | `health`                      | Public | Health/hello smoke check                                                                         |
+| Query    | `myProfile`                   | JWT    | Auth smoke test                                                                                  |
+| Query    | `myTemplates`                 | JWT    | List current user templates                                                                      |
+| Query    | `myTemplateSettings`          | JWT    | Active template + source settings                                                                |
+| Query    | `currentExpenseFile`          | JWT    | Current uploaded file metadata + content                                                         |
+| Mutation | `generateTemplate`            | JWT    | Generate template via DeepSeek                                                                   |
+| Mutation | `createTemplate`              | JWT    | Create template                                                                                  |
+| Mutation | `updateTemplate`              | JWT    | Update template                                                                                  |
+| Mutation | `deleteTemplate`              | JWT    | Delete template                                                                                  |
+| Mutation | `setActiveTemplate`           | JWT    | Set active template                                                                              |
+| Mutation | `updateDataSource`            | JWT    | Switch/update source config                                                                      |
+| Mutation | `uploadExpenseFile`           | JWT    | Upload `.txt/.csv` (max 5MB, base64), set source to `FILE_UPLOAD`                                |
+| Mutation | `overwriteCurrentExpenseFile` | JWT    | Overwrite currently configured uploaded file (base64)                                            |
+| Mutation | `sendTestEmail`               | JWT    | Render active template with sample values and send via Brevo                                     |
+| Query    | `mySummarySchedule`           | JWT    | Read automatic summary schedule settings                                                         |
+| Mutation | `updateSummarySchedule`       | JWT    | Update schedule and recalculate `next_summary_at`                                                |
+| Mutation | `updateSalary`                | JWT    | Persist current profile salary (`User.salary_cents`) from a money string                         |
+| Mutation | `sendSummaryNow`              | JWT    | Analyze the current expense file and email a real summary without changing schedule              |
+| Query    | `mySummaries`                 | JWT    | List persisted monthly analytics for ended months (`period < current YYYY-MM`)                   |
+| Query    | `mySummary(month)`            | JWT    | Single-month analytics (`null` if current/future or missing); months before `2026-01` rejected   |
+| Query    | `summaryCategoryKeys`         | JWT    | Closed English category vocabulary for manual backfill UI                                        |
+| Mutation | `createManualSummary`         | JWT    | Create historical analytics (`source = MANUAL`) for any ended month (`period < current YYYY-MM`) |
+| Mutation | `updateManualSummary`         | JWT    | Update an existing analytics row for an ended month (scheduled or manual)                        |
+| Mutation | `deleteMyAccount`             | JWT    | Delete Supabase Auth identity, profile data, and uploaded expense file                           |
+| Mutation | `scanReceipt`                 | JWT    | Upload receipt image (JPEG/PNG/WEBP, max 5MB, base64); returns `{ extractedText }`               |
+| Mutation | `approveReceiptExpenses`      | JWT    | Append edited receipt expense text to the user's uploaded expense file                           |
+| Query    | `myAiUsageSummary`            | JWT    | Current-month AI credit limit / used / remaining                                                 |
+| Query    | `myAiUsageLog`                | JWT    | Paginated AI spend audit (`limit`, `offset`)                                                     |
 
 File upload mutations accept `ExpenseFileUploadInput` / `ScanReceiptInput` with `fileName`, `mimeType`, and `contentBase64` fields.
 
@@ -202,13 +203,13 @@ DeepSeek's hosted API is text-only (no image input support), so extraction accur
 
 ## Expense analysis flow
 
-`AiService.analyzeExpenses(userId, rawExpenseContent, language, currency, period, trigger)` returns `{ summary, snapshot }`:
+`AiService.analyzeExpenses(userId, rawExpenseContent, salaryCents, language, currency, period, trigger)` returns `{ summary, snapshot }`:
 
 1. `AiUsageService.ensureWithinLimit(userId)` rejects the call when the monthly credit budget is exhausted.
-2. `parseExpenseFile()` (`src/ai/expense-file.parser.ts`) deterministically parses raw expense text into a salary total plus a canonical expense list (duplicate names are merged case/whitespace-insensitively; every amount is stored in cents).
-3. DeepSeek receives only the canonical expense list (`id`, `name`, `amount`) and a computed totals hint. Its JSON response is limited to closed English category names + `itemIds` assignments and a `savingsMessage` — it never computes or returns amounts, totals, or the current month. Allowed category keys live in `src/summary/summary-category.constants.ts`.
+2. `parseExpenseFile()` (`src/ai/expense-file.parser.ts`) deterministically parses raw expense text into a canonical expense list (duplicate names are merged case/whitespace-insensitively; every amount is stored in cents). Salary is **not** read from the file — callers pass `User.salary_cents`.
+3. DeepSeek receives only the canonical expense list (`id`, `name`, `amount`) and a computed totals hint (including the profile salary). Its JSON response is limited to closed English category names + `itemIds` assignments and a `savingsMessage` — it never computes or returns amounts, totals, salary, or the current month. Allowed category keys live in `src/summary/summary-category.constants.ts`.
 4. Token usage from `response.usage` is written to `AiUsageLog` (success or failure) with action `EXPENSE_SUMMARY` and the caller-supplied trigger (`MANUAL` / `SCHEDULED`).
-5. `reconcileExpenseAnalysis()` (`src/ai/expense-analysis.reconciler.ts`) rebuilds `salaryAmount`, `totalExpenses`, `savingsAmount`, and per-category/item totals purely from the canonical cents. AI-provided `itemIds` are validated against the canonical list; unknown or duplicate IDs are dropped and any unassigned expenses fall into an "Other expenses" category. This guarantees totals stay internally consistent even if the AI miscategorizes something.
+5. `reconcileExpenseAnalysis()` (`src/ai/expense-analysis.reconciler.ts`) rebuilds `salaryAmount`, `totalExpenses`, `savingsAmount`, and per-category/item totals purely from the canonical cents plus the provided salary. AI-provided `itemIds` are validated against the canonical list; unknown or duplicate IDs are dropped and any unassigned expenses fall into an "Other expenses" category. This guarantees totals stay internally consistent even if the AI miscategorizes something.
 6. `formatMoneyAmount()` (`src/ai/expense-amount.formatter.ts`) formats cents into locale-aware strings (e.g. `1 234,56 zł` for PL, `1,234.56 PLN` for EN) for the email `summary`.
 7. `currentMonth` is derived from the caller-supplied `period` (`YYYY-MM`) via `formatSummaryMonth()` instead of "now", so cron-generated summaries always label the month they actually cover.
 8. `snapshot` is a cents-based `SummaryAnalyticsSnapshot` with categories remapped to the closed vocabulary via `buildCanonicalCategoriesFromExpenses()` — used to persist dashboard analytics after a successful scheduled send.
@@ -224,7 +225,7 @@ Persisted monthly snapshots live in `SummaryAnalytics` (one row per `(user_id, p
 **Manual backfill** (`createManualSummary` / `updateManualSummary`):
 
 1. Validates `period` as `YYYY-MM`, rejects months before `2026-01`.
-2. Create requires `isCreatableSummaryPeriod` (strictly older than the previous calendar month in the user's timezone). Update/view require an ended month (`period < current YYYY-MM`).
+2. Create and update/view require an ended month (`period < current YYYY-MM` in the user's timezone). Once the new month has started, the previous month can be created manually. Cron never overwrites an existing analytics row for that period.
 3. `parseManualSummaryPayload()` parses salary/category money strings into cents, normalizes category names through the closed vocabulary (+ aliases), and recomputes totals/savings in code.
 4. Create sets `source = MANUAL` and snapshots `User.summary_currency`. Update rewrites amounts/categories/message but does not change `source` or currency.
 

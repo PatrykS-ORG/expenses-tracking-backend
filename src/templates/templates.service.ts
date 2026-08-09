@@ -33,6 +33,7 @@ interface TemplateSettingsPayload {
   data_source_type: DataSourceTypeEnum;
   nextcloud_file_path: string | null;
   uploaded_file_path: string | null;
+  salary_cents: number | null;
 }
 
 @Injectable()
@@ -64,6 +65,7 @@ export class TemplatesService {
         active_template_id: true,
         data_source_type: true,
         data_source_config: true,
+        salary_cents: true,
       },
     });
 
@@ -79,6 +81,7 @@ export class TemplatesService {
       data_source_type: user.data_source_type as DataSourceTypeEnum,
       nextcloud_file_path: nextcloudConfig?.filePath || null,
       uploaded_file_path: fileUploadConfig?.filePath || null,
+      salary_cents: user.salary_cents,
     };
   }
 

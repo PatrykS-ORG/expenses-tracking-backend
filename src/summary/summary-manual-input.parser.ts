@@ -11,7 +11,7 @@ import {
   ManualSummaryCategoryInput,
 } from './models/summary-analytics.model';
 
-function parseMoneyToCents(value: string, fieldName: string): number {
+export function parseMoneyToCents(value: string, fieldName: string): number {
   const parsed = parseAmountToNumber(value);
   if (parsed === null) {
     throw new BadRequestException(`Invalid amount for ${fieldName}`);

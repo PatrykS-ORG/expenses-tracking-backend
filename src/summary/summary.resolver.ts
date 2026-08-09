@@ -1,4 +1,4 @@
-import { Resolver, Query, Mutation, Args } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { SummaryService } from './summary.service';
 import {
@@ -65,6 +65,19 @@ export class SummaryResolver {
       currency: schedule.currency,
       nextSummaryAt: schedule.next_summary_at,
     };
+  }
+
+  @UseGuards(GqlAuthGuard)
+  @Mutation(() => Int)
+  async updateSalary(
+    @CurrentUserGql() user: AuthenticatedUser,
+    @Args('salaryAmount') salaryAmount: string,
+  ): Promise<number> {
+    return this.summaryService.updateSalary(
+      extractUserId(user),
+      user.email,
+      salaryAmount,
+    );
   }
 
   @UseGuards(GqlAuthGuard)

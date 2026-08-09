@@ -13,12 +13,8 @@ export interface CanonicalExpense {
 }
 
 export interface ParsedExpenseFile {
-  salaryCents: number;
   expenses: CanonicalExpense[];
 }
-
-const SALARY_NAME_PATTERN =
-  /^(wyp[lł]ata|salary|pensja|wynagrodzenie|income|przych[oó]d)\b/i;
 
 const AMOUNT_AT_END_PATTERN =
   /(-?\d{1,3}(?:[ \u00a0]?\d{3})*(?:[.,]\d+)?|-?\d+(?:[.,]\d+)?)\s*(?:z[lł]|pln|eur|usd|gbp)?\s*$/i;
@@ -72,16 +68,12 @@ function parseLine(line: string): ParsedExpenseLine | null {
   };
 }
 
-function isSalaryName(name: string): boolean {
-  return SALARY_NAME_PATTERN.test(normalizeExpenseName(name));
-}
-
 /**
- * Parses free-form expense file text into salary + merged expense rows.
+ * Parses free-form expense file text into merged expense rows.
  * Duplicate names (case/whitespace-insensitive) are summed into one row.
+ * Salary is not parsed from the file — it comes from the user profile.
  */
 export function parseExpenseFile(rawContent: string): ParsedExpenseFile {
-  let salaryCents = 0;
   const merged = new Map<
     string,
     { name: string; amountCents: number; order: number }
@@ -91,11 +83,6 @@ export function parseExpenseFile(rawContent: string): ParsedExpenseFile {
   for (const rawLine of rawContent.split(/\r?\n/)) {
     const parsed = parseLine(rawLine);
     if (!parsed) {
-      continue;
-    }
-
-    if (isSalaryName(parsed.name)) {
-      salaryCents += parsed.amountCents;
       continue;
     }
 
@@ -121,5 +108,5 @@ export function parseExpenseFile(rawContent: string): ParsedExpenseFile {
       amountCents: entry.amountCents,
     }));
 
-  return { salaryCents, expenses };
+  return { expenses };
 }

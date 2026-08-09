@@ -36,14 +36,15 @@ curl -X POST "http://localhost:5173/api/cron/process-summaries" \
 For each due user:
 
 1. Skip if the user has no remaining AI credits (`AiUsageService.hasRemainingCredits`) — outcome `skipped` with reason `AI credit limit reached`.
-2. Resolve expense file through `DataSourceResolverService` (`FILE_UPLOAD` or `NEXTCLOUD`).
-3. Analyze content with `AiService.analyzeExpenses(..., trigger: SCHEDULED)`, passing the user's `summary_email_language` (`PL` / `EN`), `summary_currency`, and the resolved `period` (`YYYY-MM`). Returns `{ summary, snapshot }` — amounts/totals are computed deterministically from the parsed file and only cross-checked against the AI's categorization — see [Expense analysis flow](./architecture.md#expense-analysis-flow). Token usage is audited as `EXPENSE_SUMMARY` / `SCHEDULED`.
-4. Map the reconciled categories to an HTML expense table via `buildExpensesListHtml()`, then inject placeholders into the active template.
-5. Render active HTML template with `applyTemplateValues()`.
-6. Send email to `User.email` through `EmailService`.
-7. Upsert `SummaryLog` with period key `YYYY-MM` (previous calendar month in user timezone).
-8. Insert `SummaryAnalytics` (`source = SCHEDULED`) from the analysis `snapshot` only when no row exists for `(user_id, period)` — never overwrite existing analytics.
-9. Advance `next_summary_at` to the next scheduled occurrence.
+2. Skip if `User.salary_cents` is missing or not positive — outcome `skipped` with reason `missing or invalid salary`.
+3. Resolve expense file through `DataSourceResolverService` (`FILE_UPLOAD` or `NEXTCLOUD`).
+4. Analyze content with `AiService.analyzeExpenses(..., salaryCents, trigger: SCHEDULED)`, passing the user's profile salary, `summary_email_language` (`PL` / `EN`), `summary_currency`, and the resolved `period` (`YYYY-MM`). Returns `{ summary, snapshot }` — amounts/totals are computed deterministically from the parsed expenses plus profile salary; the AI only categorizes — see [Expense analysis flow](./architecture.md#expense-analysis-flow). Token usage is audited as `EXPENSE_SUMMARY` / `SCHEDULED`.
+5. Map the reconciled categories to an HTML expense table via `buildExpensesListHtml()`, then inject placeholders into the active template.
+6. Render active HTML template with `applyTemplateValues()`.
+7. Send email to `User.email` through `EmailService`.
+8. Upsert `SummaryLog` with period key `YYYY-MM` (previous calendar month in user timezone).
+9. Insert `SummaryAnalytics` (`source = SCHEDULED`) from the analysis `snapshot` only when no row exists for `(user_id, period)` — never overwrite existing analytics.
+10. Advance `next_summary_at` to the next scheduled occurrence.
 
 On failure:
 

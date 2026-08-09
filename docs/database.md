@@ -26,6 +26,7 @@ Application profile linked to Supabase Auth (`User.id` should match JWT `sub`).
 | `summary_currency`       | `String`               | Report currency (default `PLN`)                          |
 | `summary_enabled`        | `Boolean`              | Whether user receives automatic summaries                |
 | `next_summary_at`        | `DateTime?`            | Next planned send timestamp (UTC)                        |
+| `salary_cents`           | `Int?`                 | Current salary/income in minor units (required for send) |
 | `ai_credit_limit`        | `Int`                  | Monthly AI credit budget (default `50`)                  |
 | `created_at`             | `DateTime`             | Profile creation timestamp                               |
 
@@ -210,6 +211,7 @@ erDiagram
     string summary_currency
     boolean summary_enabled
     datetime next_summary_at
+    int salary_cents
     int ai_credit_limit
     datetime created_at
   }

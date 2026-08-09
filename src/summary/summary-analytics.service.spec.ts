@@ -99,6 +99,7 @@ describe('SummaryService analytics', () => {
     summary_schedule_day: 1,
     summary_schedule_hour: 8,
     next_summary_at: new Date('2026-04-01T06:00:00.000Z'),
+    salary_cents: 300_000,
   };
 
   const analysisResult = {

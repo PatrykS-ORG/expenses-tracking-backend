@@ -305,12 +305,19 @@ export class AiService {
   async analyzeExpenses(
     userId: string,
     rawExpenseContent: string,
+    salaryCents: number,
     language: SummaryEmailLanguage = SummaryEmailLanguage.PL,
     currency = 'PLN',
     period?: string,
     trigger: AiUsageTrigger = AiUsageTrigger.MANUAL,
   ): Promise<AnalyzeExpensesResult> {
     await this.aiUsageService.ensureWithinLimit(userId);
+
+    if (!Number.isFinite(salaryCents) || salaryCents <= 0) {
+      throw new BadRequestException(
+        'Set a positive salary before generating a summary',
+      );
+    }
 
     const resolvedLanguage = normalizeSummaryEmailLanguage(language);
     const parsedFile = parseExpenseFile(rawExpenseContent);
@@ -327,7 +334,7 @@ export class AiService {
       getSummaryLanguageInstructions(resolvedLanguage);
     const totalsHint = this.buildTotalsHint(
       parsedFile.expenses,
-      parsedFile.salaryCents,
+      salaryCents,
       resolvedLanguage,
       currency,
     );
@@ -401,7 +408,7 @@ ${canonicalList}`,
       const reconciled = reconcileExpenseAnalysis(
         parsedFile.expenses,
         aiResult.categories,
-        parsedFile.salaryCents,
+        salaryCents,
         resolvedLanguage,
         currency,
       );

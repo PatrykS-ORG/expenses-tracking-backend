@@ -48,6 +48,8 @@ describe('summary-schedule.util', () => {
     expect(isCreatableSummaryPeriod('2026-02', timezone, at)).toBe(true);
     expect(isCreatableSummaryPeriod('2026-01', timezone, at)).toBe(true);
     expect(isCreatableSummaryPeriod('2025-12', timezone, at)).toBe(false);
-    expect(isCreatableSummaryPeriod('2026-03', timezone, at)).toBe(false);
+    // Previous month is creatable once the new month has started.
+    expect(isCreatableSummaryPeriod('2026-03', timezone, at)).toBe(true);
+    expect(isCreatableSummaryPeriod('2026-04', timezone, at)).toBe(false);
   });
 });

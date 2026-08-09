@@ -236,7 +236,7 @@ describe('SummaryService analytics', () => {
     expect(prismaMock.summaryAnalytics.findUnique).not.toHaveBeenCalled();
   });
 
-  it('creates manual summary only for periods older than previous month', async () => {
+  it('creates manual summary for ended months including the previous month', async () => {
     prismaMock.user.findUnique.mockResolvedValue({
       summary_timezone: 'Europe/Warsaw',
       summary_currency: 'PLN',
@@ -245,7 +245,7 @@ describe('SummaryService analytics', () => {
     prismaMock.summaryAnalytics.create.mockResolvedValue({
       id: 'analytics-1',
       user_id: 'user-1',
-      period: '2026-02',
+      period: '2026-03',
       source: SummaryAnalyticsSource.MANUAL,
       currency: 'PLN',
       salary_cents: 500_000,
@@ -257,15 +257,18 @@ describe('SummaryService analytics', () => {
       updated_at: new Date(),
     });
 
+    // Fake timers: 2026-04-10 → previous month 2026-03 is creatable.
     await service.createManualSummary('user-1', 'user@example.com', {
-      period: '2026-02',
+      period: '2026-03',
       salaryAmount: '5000',
       categories: [{ name: 'Groceries', total: '1000' }],
     });
 
+    expect(prismaMock.summaryAnalytics.create).toHaveBeenCalled();
+
     await expect(
       service.createManualSummary('user-1', 'user@example.com', {
-        period: '2026-03',
+        period: '2026-04',
         salaryAmount: '5000',
         categories: [{ name: 'Groceries', total: '1000' }],
       }),

@@ -355,7 +355,7 @@ export class SummaryService {
     const timezone = await this.getUserTimezone(userId);
     if (!isCreatableSummaryPeriod(period, timezone)) {
       throw new BadRequestException(
-        'Manual summaries can only be created for months older than the previous calendar month',
+        'Manual summaries can only be created for ended calendar months',
       );
     }
 

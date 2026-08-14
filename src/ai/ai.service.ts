@@ -389,6 +389,7 @@ ${canonicalList}`,
       }
 
       const aiResult = this.parseAiCategorization(choice.message.content);
+
       if (!aiResult) {
         await this.recordCallUsage({
           userId,
@@ -672,10 +673,10 @@ ${canonicalList}`,
     categories: AiCategoryAssignment[];
   } | null {
     const trimmed = rawContent.trim();
-    const unwrapped = trimmed.startsWith('```json')
+    const unwrapped = trimmed.startsWith('```')
       ? trimmed
-          .replace(/^```json\s*/, '')
-          .replace(/```$/, '')
+          .replace(/^```(?:json)?\s*/i, '')
+          .replace(/\s*```\s*$/, '')
           .trim()
       : trimmed;
 
@@ -732,7 +733,7 @@ ${canonicalList}`,
       }
 
       if (!Array.isArray(category.itemIds) || category.itemIds.length === 0) {
-        return null;
+        continue;
       }
 
       const itemIds = category.itemIds.filter(
@@ -740,7 +741,7 @@ ${canonicalList}`,
       );
 
       if (itemIds.length === 0) {
-        return null;
+        continue;
       }
 
       categories.push({

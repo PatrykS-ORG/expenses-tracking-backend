@@ -1,6 +1,10 @@
 import { SummaryEmailLanguage } from '../generated/prisma/client';
 import { amountToCents, formatMoneyAmount } from './expense-amount.formatter';
-import { parseExpenseFile } from './expense-file.parser';
+import {
+  parseCategorizedExpenseFile,
+  parseExpenseFile,
+  serializeCategorizedExpenseFile,
+} from './expense-file.parser';
 
 describe('expense-amount.formatter', () => {
   it('formats Polish PLN with zł suffix', () => {
@@ -73,5 +77,85 @@ Groceries 100zł
       { id: 1, name: 'Wypłata', amountCents: 670_000 },
       { id: 2, name: 'Groceries', amountCents: 10_000 },
     ]);
+  });
+
+  it('strips category prefixes for cron-compatible name merging', () => {
+    const parsed = parseExpenseFile(`
+Groceries | Biedronka 45.20 PLN
+Transport | Orlen 120.00
+Biedronka 10.00
+`);
+
+    expect(parsed.expenses).toEqual([
+      { id: 1, name: 'Biedronka', amountCents: 5520 },
+      { id: 2, name: 'Orlen', amountCents: 12_000 },
+    ]);
+  });
+});
+
+describe('parseCategorizedExpenseFile', () => {
+  it('groups prefixed lines and leaves plain lines unassigned', () => {
+    const parsed = parseCategorizedExpenseFile(`
+Groceries | Biedronka 45.20 PLN
+Transport | Orlen 120.00
+Netflix 59.00 PLN
+`);
+
+    expect(parsed.categories).toEqual([
+      {
+        key: 'Groceries',
+        items: [{ name: 'Biedronka', amountCents: 4520 }],
+      },
+      {
+        key: 'Transport',
+        items: [{ name: 'Orlen', amountCents: 12_000 }],
+      },
+    ]);
+    expect(parsed.unassigned).toEqual([{ name: 'Netflix', amountCents: 5900 }]);
+  });
+
+  it('merges same name within a category but not across categories', () => {
+    const parsed = parseCategorizedExpenseFile(`
+Groceries | Biedronka 10.00
+Groceries | biedronka 5.00
+DiningOut | Biedronka 20.00
+`);
+
+    expect(parsed.categories).toEqual([
+      {
+        key: 'Groceries',
+        items: [{ name: 'Biedronka', amountCents: 1500 }],
+      },
+      {
+        key: 'DiningOut',
+        items: [{ name: 'Biedronka', amountCents: 2000 }],
+      },
+    ]);
+    expect(parsed.unassigned).toEqual([]);
+  });
+});
+
+describe('serializeCategorizedExpenseFile', () => {
+  it('round-trips categorized and unassigned items', () => {
+    const original = {
+      categories: [
+        {
+          key: 'Groceries' as const,
+          items: [{ name: 'Biedronka', amountCents: 4520 }],
+        },
+        {
+          key: 'Transport' as const,
+          items: [{ name: 'Orlen', amountCents: 12_000 }],
+        },
+      ],
+      unassigned: [{ name: 'Netflix', amountCents: 5900 }],
+    };
+
+    const text = serializeCategorizedExpenseFile(original);
+    expect(text).toBe(
+      'Groceries | Biedronka 45.20\nTransport | Orlen 120.00\nNetflix 59.00\n',
+    );
+
+    expect(parseCategorizedExpenseFile(text)).toEqual(original);
   });
 });

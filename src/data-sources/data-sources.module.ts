@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AiModule } from '../ai/ai.module';
 import { TemplatesModule } from '../templates/templates.module';
 import { DataSourceResolverService } from './data-source-resolver.service';
 import { DataSourcesResolver } from './data-sources.resolver';
@@ -8,7 +9,7 @@ import { NextcloudProvider } from './providers/nextcloud.provider';
 import { SupabaseStorageService } from './supabase-storage.service';
 
 @Module({
-  imports: [TemplatesModule],
+  imports: [TemplatesModule, AiModule],
   providers: [
     SupabaseStorageService,
     FileUploadProvider,
@@ -17,6 +18,10 @@ import { SupabaseStorageService } from './supabase-storage.service';
     DataSourcesService,
     DataSourcesResolver,
   ],
-  exports: [DataSourceResolverService, SupabaseStorageService],
+  exports: [
+    DataSourceResolverService,
+    SupabaseStorageService,
+    DataSourcesService,
+  ],
 })
 export class DataSourcesModule {}

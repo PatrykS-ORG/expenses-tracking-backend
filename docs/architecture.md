@@ -153,6 +153,7 @@ All client-facing operations are exposed through GraphQL at `/graphql`.
 | Query    | `myTemplates`                 | JWT    | List current user templates                                                                      |
 | Query    | `myTemplateSettings`          | JWT    | Active template + source settings                                                                |
 | Query    | `currentExpenseFile`          | JWT    | Current uploaded file metadata + content                                                         |
+| Query    | `currentMonthExpenses`        | JWT    | Structured category + unassigned breakdown of the uploaded expense file                          |
 | Mutation | `generateTemplate`            | JWT    | Generate template via DeepSeek                                                                   |
 | Mutation | `createTemplate`              | JWT    | Create template                                                                                  |
 | Mutation | `updateTemplate`              | JWT    | Update template                                                                                  |
@@ -161,6 +162,8 @@ All client-facing operations are exposed through GraphQL at `/graphql`.
 | Mutation | `updateDataSource`            | JWT    | Switch/update source config                                                                      |
 | Mutation | `uploadExpenseFile`           | JWT    | Upload `.txt/.csv` (max 5MB, base64), set source to `FILE_UPLOAD`                                |
 | Mutation | `overwriteCurrentExpenseFile` | JWT    | Overwrite currently configured uploaded file (base64)                                            |
+| Mutation | `saveCurrentMonthExpenses`    | JWT    | Serialize categorized + unassigned items and overwrite the uploaded expense file                 |
+| Mutation | `suggestExpenseCategories`    | JWT    | AI-suggest categories for unassigned expense lines (uses AI credits; does not auto-save)         |
 | Mutation | `sendTestEmail`               | JWT    | Render active template with sample values and send via Brevo                                     |
 | Query    | `mySummarySchedule`           | JWT    | Read automatic summary schedule settings                                                         |
 | Mutation | `updateSummarySchedule`       | JWT    | Update schedule and recalculate `next_summary_at`                                                |
@@ -206,7 +209,7 @@ DeepSeek's hosted API is text-only (no image input support), so extraction accur
 `AiService.analyzeExpenses(userId, rawExpenseContent, salaryCents, language, currency, period, trigger)` returns `{ summary, snapshot }`:
 
 1. `AiUsageService.ensureWithinLimit(userId)` rejects the call when the monthly credit budget is exhausted.
-2. `parseExpenseFile()` (`src/ai/expense-file.parser.ts`) deterministically parses raw expense text into a canonical expense list (duplicate names are merged case/whitespace-insensitively; every amount is stored in cents). Salary is **not** read from the file — callers pass `User.salary_cents`.
+2. `parseExpenseFile()` (`src/ai/expense-file.parser.ts`) deterministically parses raw expense text into a canonical expense list (duplicate names are merged case/whitespace-insensitively; every amount is stored in cents). Optional `CategoryKey |` prefixes are stripped for this cron/AI path. Salary is **not** read from the file — callers pass `User.salary_cents`. Structured UI read/write uses `parseCategorizedExpenseFile` / `serializeCategorizedExpenseFile` so prefixes round-trip for in-month editing.
 3. DeepSeek receives only the canonical expense list (`id`, `name`, `amount`) and a computed totals hint (including the profile salary). Its JSON response is limited to closed English category names + `itemIds` assignments and a `savingsMessage` — it never computes or returns amounts, totals, salary, or the current month. Allowed category keys live in `src/summary/summary-category.constants.ts`.
 4. Token usage from `response.usage` is written to `AiUsageLog` (success or failure) with action `EXPENSE_SUMMARY` and the caller-supplied trigger (`MANUAL` / `SCHEDULED`).
 5. `reconcileExpenseAnalysis()` (`src/ai/expense-analysis.reconciler.ts`) rebuilds `salaryAmount`, `totalExpenses`, `savingsAmount`, and per-category/item totals purely from the canonical cents plus the provided salary. AI-provided `itemIds` are validated against the canonical list; unknown or duplicate IDs are dropped and any unassigned expenses fall into an "Other expenses" category. This guarantees totals stay internally consistent even if the AI miscategorizes something.

@@ -97,6 +97,40 @@ export interface AnalyzeExpensesResult {
   snapshot: SummaryAnalyticsSnapshot;
 }
 
+const EXPENSE_CATEGORIZE_PROMPT = `You are a financial assistant that categorizes expenses.
+
+The application has ALREADY parsed, merged duplicate names, and calculated every amount.
+Your job is ONLY to assign each canonical expense ID to a parent category.
+
+Return strictly valid JSON with this key:
+- categories (array of category objects)
+
+Each category object must contain:
+- name (string, parent category label — exact English key)
+- itemIds (array of integers — IDs from the provided canonical expense list)
+
+Categorization rules (critical):
+1) Group expenses into parent categories using ONLY these exact English category names:
+   ${CANONICAL_CATEGORY_KEYS.join(', ')}
+2) Every expense ID from the canonical list MUST appear in exactly one category.itemIds.
+3) Do not invent IDs. Do not omit IDs. Do not duplicate IDs across categories.
+4) Do not invent expenses that are not in the canonical list.
+5) Each category.itemIds must contain at least 1 ID.
+6) Use the English category names exactly as listed above (not translated labels).
+
+Formatting rules:
+1) Return JSON only — no markdown, no HTML, no commentary.
+2) Do NOT include userName, savingsMessage, amounts, or item names.
+
+Example shape:
+{
+  "categories": [
+    { "name": "Groceries", "itemIds": [1, 2, 3] },
+    { "name": "Transport", "itemIds": [4, 5] }
+  ]
+}
+`;
+
 const RECEIPT_SCAN_PROMPT = `You are a financial assistant that extracts purchased-item expenses from noisy OCR text of a store receipt.
 Read the OCR text and return ONLY plain text lines in this format:
 <item name>: <amount and currency>
@@ -389,6 +423,7 @@ ${canonicalList}`,
       }
 
       const aiResult = this.parseAiCategorization(choice.message.content);
+
       if (!aiResult) {
         await this.recordCallUsage({
           userId,
@@ -638,6 +673,138 @@ ${canonicalList}`,
     }
   }
 
+  /**
+   * Categorizes a list of canonical expenses without writing a savings message
+   * or requiring salary. Used for optional in-month "Suggest categories".
+   */
+  async categorizeExpenses(
+    userId: string,
+    expenses: CanonicalExpense[],
+    trigger: AiUsageTrigger = AiUsageTrigger.MANUAL,
+  ): Promise<AiCategoryAssignment[]> {
+    await this.aiUsageService.ensureWithinLimit(userId);
+
+    if (expenses.length === 0) {
+      return [];
+    }
+
+    const openai = this.createClient();
+    const model = 'deepseek-chat';
+    const canonicalList = expenses
+      .map(
+        (expense) =>
+          `${expense.id}. ${expense.name} — ${formatMoneyAmount(expense.amountCents, SummaryEmailLanguage.EN, 'PLN')}`,
+      )
+      .join('\n');
+
+    let usage: TokenUsage = {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+    };
+    let recorded = false;
+
+    try {
+      const response = await openai.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: EXPENSE_CATEGORIZE_PROMPT },
+          {
+            role: 'user',
+            content: `Canonical expenses (assign every ID exactly once):\n${canonicalList}`,
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: 4096,
+      });
+
+      usage = this.extractUsage(response.usage);
+
+      const choice = response.choices[0];
+      if (!choice?.message?.content) {
+        await this.recordCallUsage({
+          userId,
+          action: AiActionType.EXPENSE_SUMMARY,
+          trigger,
+          model,
+          usage,
+          success: false,
+          errorMessage: 'AI returned empty categorization',
+        });
+        recorded = true;
+        throw new ServiceUnavailableException(
+          'AI returned empty categorization',
+        );
+      }
+
+      const categories = this.parseAiCategoryAssignmentsOnly(
+        choice.message.content,
+      );
+
+      if (!categories || categories.length === 0) {
+        await this.recordCallUsage({
+          userId,
+          action: AiActionType.EXPENSE_SUMMARY,
+          trigger,
+          model,
+          usage,
+          success: false,
+          errorMessage: 'AI returned malformed categorization JSON',
+        });
+        recorded = true;
+        throw new ServiceUnavailableException(
+          'AI returned malformed categorization JSON',
+        );
+      }
+
+      await this.recordCallUsage({
+        userId,
+        action: AiActionType.EXPENSE_SUMMARY,
+        trigger,
+        model,
+        usage,
+        success: true,
+      });
+      recorded = true;
+
+      return categories;
+    } catch (error) {
+      if (!recorded && (usage.totalTokens > 0 || usage.promptTokens > 0)) {
+        await this.recordCallUsage({
+          userId,
+          action: AiActionType.EXPENSE_SUMMARY,
+          trigger,
+          model,
+          usage,
+          success: false,
+          errorMessage:
+            error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+
+      if (
+        error instanceof ServiceUnavailableException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      const message =
+        error instanceof OpenAI.APIError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'Unknown error';
+
+      this.logger.error(
+        `Failed to categorize expenses: ${message}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      throw new ServiceUnavailableException('Could not categorize expenses');
+    }
+  }
+
   private buildTotalsHint(
     expenses: CanonicalExpense[],
     salaryCents: number,
@@ -666,16 +833,37 @@ ${canonicalList}`,
       .join('\n');
   }
 
+  private parseAiCategoryAssignmentsOnly(
+    rawContent: string,
+  ): AiCategoryAssignment[] | null {
+    const trimmed = rawContent.trim();
+    const unwrapped = trimmed.startsWith('```')
+      ? trimmed
+          .replace(/^```(?:json)?\s*/i, '')
+          .replace(/\s*```\s*$/, '')
+          .trim()
+      : trimmed;
+
+    try {
+      const parsed = JSON.parse(unwrapped) as {
+        categories?: unknown;
+      };
+      return this.normalizeCategoryAssignments(parsed.categories);
+    } catch {
+      return null;
+    }
+  }
+
   private parseAiCategorization(rawContent: string): {
     userName: string;
     savingsMessage: string;
     categories: AiCategoryAssignment[];
   } | null {
     const trimmed = rawContent.trim();
-    const unwrapped = trimmed.startsWith('```json')
+    const unwrapped = trimmed.startsWith('```')
       ? trimmed
-          .replace(/^```json\s*/, '')
-          .replace(/```$/, '')
+          .replace(/^```(?:json)?\s*/i, '')
+          .replace(/\s*```\s*$/, '')
           .trim()
       : trimmed;
 
@@ -732,7 +920,7 @@ ${canonicalList}`,
       }
 
       if (!Array.isArray(category.itemIds) || category.itemIds.length === 0) {
-        return null;
+        continue;
       }
 
       const itemIds = category.itemIds.filter(
@@ -740,7 +928,7 @@ ${canonicalList}`,
       );
 
       if (itemIds.length === 0) {
-        return null;
+        continue;
       }
 
       categories.push({

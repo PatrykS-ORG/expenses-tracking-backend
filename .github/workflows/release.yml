@@ -12,8 +12,11 @@ jobs:
   release:
     name: Tag, Changelog, and GitHub Release
     runs-on: self-hosted
-    # Ignore the follow-up commit that only updates CHANGELOG.md
-    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    # Ignore the follow-up commit that only updates CHANGELOG.md.
+    # Do not use [skip ci] here: GitHub skips *all* push workflows when that
+    # string appears anywhere in the commit message (including merge bodies
+    # that quote docs), which silently blocks production releases.
+    if: "${{ !startsWith(github.event.head_commit.message, 'chore(release): update CHANGELOG') }}"
 
     steps:
       - name: Checkout code
@@ -49,7 +52,7 @@ jobs:
             echo "CHANGELOG.md unchanged"
             exit 0
           fi
-          git commit -m "chore(release): update CHANGELOG for ${{ steps.tag_version.outputs.new_tag }} [skip ci]"
+          git commit -m "chore(release): update CHANGELOG for ${{ steps.tag_version.outputs.new_tag }}"
           git push origin HEAD:production
 
       - name: Create GitHub Release

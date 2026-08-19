@@ -59,6 +59,7 @@ model User {
   summaryLogs           SummaryLog[]
   summaryAnalytics      SummaryAnalytics[]
   aiUsageLogs           AiUsageLog[]
+  monthlyBudget         MonthlyBudget?
 
   // Relacja do aktywnego szablonu
   activeTemplate Template? @relation("ActiveTemplate", fields: [active_template_id], references: [id])
@@ -108,6 +109,17 @@ model Template {
   // Relacja zwrotna do użytkownika
   user           User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
   activeForUsers User[] @relation("ActiveTemplate")
+}
+
+model MonthlyBudget {
+  id         String   @id @default(uuid())
+  user_id    String   @unique
+  currency   String
+  categories Json
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
 
 model AiUsageLog {

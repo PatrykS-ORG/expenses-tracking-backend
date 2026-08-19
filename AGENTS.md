@@ -4,7 +4,7 @@ NestJS 11 API for **ExpenseAI**.
 Current scope includes:
 
 - Supabase JWT auth (GraphQL guards)
-- Prisma persistence (`User`, `Template`, `SummaryLog`, `SummaryAnalytics`, `AiUsageLog`)
+- Prisma persistence (`User`, `Template`, `SummaryLog`, `SummaryAnalytics`, `MonthlyBudget`, `AiUsageLog`)
 - AI template generation and expense analysis (DeepSeek)
 - Monthly AI credit limits + spend audit (`AiUsageModule`)
 - Data-source abstraction (`FILE_UPLOAD` via Supabase Storage, `NEXTCLOUD` via WebDAV)
@@ -57,6 +57,7 @@ src/
 ├── data-sources/            # GraphQL upload queries/mutations + source providers
 ├── receipts/                # Receipt scan + approveReceiptExpenses GraphQL mutations + OCR
 ├── summary/                 # Summary schedule + analytics GraphQL + batch pipeline
+├── budget/                  # Monthly category budget template GraphQL
 ├── cron/                    # Secured REST webhook for hourly summaries
 ├── email/                   # Brevo client + HTML template rendering helper
 ├── users/                   # Profile provisioning + account deletion

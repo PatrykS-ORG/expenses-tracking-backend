@@ -37,6 +37,7 @@ Relations:
 - `summaryLogs` — history of processed summary periods
 - `summaryAnalytics` — persisted monthly expense analytics snapshots
 - `aiUsageLogs` — AI spend audit entries
+- `monthlyBudget` — optional reusable monthly category budget template
 
 ### `SummaryLog`
 
@@ -87,6 +88,29 @@ Unique constraint: `(user_id, period)`.
 ```
 
 Closed category keys: `Bills`, `Groceries`, `DiningOut`, `Transport`, `Education`, `Entertainment`, `Investments`, `Car`, `Clothing`, `Snacks`, `Health`, `Travel`, `Gifts`, `Other`.
+
+### `MonthlyBudget`
+
+Reusable monthly category budget template. One row per user; persists until the user overwrites it (a new calendar month does not reset it).
+
+| Field        | Type        | Description                                           |
+| ------------ | ----------- | ----------------------------------------------------- |
+| `id`         | `String` PK | Budget row id                                         |
+| `user_id`    | `String` UK | Owner id (one budget per user)                        |
+| `currency`   | `String`    | Budget currency (same closed list as report currency) |
+| `categories` | `Json`      | Array of canonical category keys with planned cents   |
+| `created_at` | `DateTime`  | First insert timestamp                                |
+| `updated_at` | `DateTime`  | Last overwrite timestamp                              |
+
+Unique constraint: `user_id`.
+
+`categories` JSON shape:
+
+```json
+[{ "key": "Groceries", "amountCents": 80000 }]
+```
+
+Omitted keys are treated as `0` by the client. Amounts must be non-negative integers.
 
 ### `Template`
 
@@ -199,6 +223,7 @@ erDiagram
   User ||--o{ SummaryLog : logs
   User ||--o{ SummaryAnalytics : analytics
   User ||--o{ AiUsageLog : aiUsage
+  User ||--o| MonthlyBudget : monthlyBudget
   User {
     string id PK
     string email UK
@@ -214,6 +239,14 @@ erDiagram
     int salary_cents
     int ai_credit_limit
     datetime created_at
+  }
+  MonthlyBudget {
+    string id PK
+    string user_id UK
+    string currency
+    json categories
+    datetime created_at
+    datetime updated_at
   }
   Template {
     string id PK
@@ -272,6 +305,7 @@ erDiagram
 | `20260715193600_add_summary_currency`       | Adds the preferred summary report currency (default `PLN`)                                                |
 | `20260801120000_add_ai_usage_tracking`      | Adds `ai_credit_limit` on `User`, `AiUsageLog`, `AiActionType`, and `AiUsageTrigger`                      |
 | `20260805194853_add_summary_analytics`      | Adds `SummaryAnalytics` table and `SummaryAnalyticsSource` enum                                           |
+| `20260819213000_add_monthly_budget`         | Adds `MonthlyBudget` table (one reusable category budget template per user)                               |
 
 ## Business rules
 
@@ -287,10 +321,10 @@ erDiagram
 - `sendSummaryNow` sends email only — it does not write `SummaryAnalytics`.
 - Manual analytics create/update/view require an ended month (`period < current YYYY-MM` in the user's timezone). Once the new month has started, the previous month can be created manually. Update may rewrite either `SCHEDULED` or `MANUAL` rows; it does not change `source` or currency.
 - Accepted analytics periods start at `2026-01` (earlier months are rejected).
-- Category keys in analytics JSON must belong to the closed vocabulary listed above.
+- Category keys in analytics JSON and `MonthlyBudget.categories` must belong to the closed vocabulary listed above.
 - Report currency is restricted by the API to `PLN`, `EUR`, `USD`, `GBP`, `CHF`, `CZK`, or `UAH`; it controls AI output formatting and does not perform exchange-rate conversion.
 - AI spend is capped monthly per user (`User.ai_credit_limit`). Credits = `ceil(total_tokens / AI_TOKENS_PER_CREDIT)`. Manual AI actions fail when the budget is exhausted; cron summaries skip those users.
-- `deleteMyAccount` removes the Supabase Auth identity, local profile (including cascaded templates, summary logs, summary analytics, and AI usage logs), and best-effort removes the uploaded expense file.
+- `deleteMyAccount` removes the Supabase Auth identity, local profile (including cascaded templates, summary logs, summary analytics, monthly budget, and AI usage logs), and best-effort removes the uploaded expense file.
 
 See [cron-summaries.md](./cron-summaries.md) for batch processing details.
 

@@ -9,15 +9,21 @@ permissions:
   contents: write
 
 jobs:
-  tag:
-    name: Create Git Tag
+  release:
+    name: Tag, Changelog, and GitHub Release
     runs-on: self-hosted
+    # Ignore the follow-up commit that only updates CHANGELOG.md.
+    # Do not use [skip ci] here: GitHub skips *all* push workflows when that
+    # string appears anywhere in the commit message (including merge bodies
+    # that quote docs), which silently blocks production releases.
+    if: "${{ !startsWith(github.event.head_commit.message, 'chore(release): update CHANGELOG') }}"
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.OWNER_AUTH_TOKEN }}
 
       - name: Bump version and push tag
         id: tag_version
@@ -27,6 +33,40 @@ jobs:
           WITH_V: true
           DEFAULT_BUMP: patch
 
-      - name: Print new tag
+      - name: Generate changelog section
+        id: changelog
+        if: ${{ steps.tag_version.outputs.new_tag != '' && steps.tag_version.outputs.new_tag != steps.tag_version.outputs.old_tag }}
         run: |
-          echo "New tag created: ${{ steps.tag_version.outputs.new_tag }}"
+          chmod +x .github/scripts/update-changelog.sh
+          .github/scripts/update-changelog.sh \
+            "${{ steps.tag_version.outputs.new_tag }}" \
+            "${{ steps.tag_version.outputs.old_tag }}"
+
+      - name: Commit CHANGELOG.md
+        if: ${{ steps.tag_version.outputs.new_tag != '' && steps.tag_version.outputs.new_tag != steps.tag_version.outputs.old_tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if git diff --staged --quiet; then
+            echo "CHANGELOG.md unchanged"
+            exit 0
+          fi
+          git commit -m "chore(release): update CHANGELOG for ${{ steps.tag_version.outputs.new_tag }}"
+          git push origin HEAD:production
+
+      - name: Create GitHub Release
+        if: ${{ steps.tag_version.outputs.new_tag != '' && steps.tag_version.outputs.new_tag != steps.tag_version.outputs.old_tag }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          name: ${{ steps.tag_version.outputs.new_tag }}
+          body_path: RELEASE_NOTES.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.OWNER_AUTH_TOKEN }}
+
+      - name: Print release summary
+        if: ${{ steps.tag_version.outputs.new_tag != '' && steps.tag_version.outputs.new_tag != steps.tag_version.outputs.old_tag }}
+        run: |
+          echo "Tagged: ${{ steps.tag_version.outputs.new_tag }}"
+          echo "Previous: ${{ steps.tag_version.outputs.old_tag }}"

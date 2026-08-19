@@ -15,6 +15,7 @@ import { EmailModule } from './email/email.module';
 import { ReceiptsModule } from './receipts/receipts.module';
 import { CronModule } from './cron/cron.module';
 import { SummaryModule } from './summary/summary.module';
+import { BudgetModule } from './budget/budget.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { SummaryModule } from './summary/summary.module';
     EmailModule,
     ReceiptsModule,
     SummaryModule,
+    BudgetModule,
     CronModule,
   ],
   providers: [AppService, AppResolver],

@@ -96,6 +96,20 @@ Current critical env groups:
 - E2E tests under `test/`
 - Mock `PrismaService` and integration clients where possible
 
+## Commit messages (changelog)
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) so production releases can categorize `CHANGELOG.md` entries:
+
+| Prefix  | Changelog section |
+| ------- | ----------------- |
+| `feat:` | Features          |
+| `fix:`  | Bug Fixes         |
+| other   | Other             |
+
+Examples: `feat: categorize expenses for current month`, `fix: handle malformed AI JSON on send email`.
+
+Do not edit `CHANGELOG.md` in feature PRs — `.github/workflows/release.yml` prepends sections on each push to `production`. See the docs repo: `processes/release-and-changelog.md`.
+
 ## How to add a feature module
 
 1. Create `src/<feature>/`.

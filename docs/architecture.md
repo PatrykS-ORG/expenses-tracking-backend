@@ -32,6 +32,7 @@ flowchart LR
     AiUsageMod[AiUsageModule]
     ReceiptsMod[ReceiptsModule]
     SummaryMod[SummaryModule]
+    BudgetMod[BudgetModule]
     CronMod[CronModule]
     PrismaSvc[PrismaService]
   end
@@ -73,6 +74,7 @@ flowchart LR
   SummaryMod --> AiUsageMod
   SummaryMod --> EmailMod
   SummaryMod --> DataSourcesMod
+  BudgetMod --> PrismaSvc
   CronMod --> SummaryMod
   PrismaSvc --> Postgres
 ```
@@ -92,6 +94,7 @@ flowchart LR
 - `EmailModule`
 - `ReceiptsModule`
 - `SummaryModule`
+- `BudgetModule`
 - `CronModule`
 
 ### Implemented modules
@@ -109,6 +112,7 @@ flowchart LR
 | `EmailModule`       | Brevo email sending                                                          |
 | `ReceiptsModule`    | Receipt scan + `approveReceiptExpenses` GraphQL mutations + OCR              |
 | `SummaryModule`     | Summary schedule + monthly analytics GraphQL + batch summary pipeline        |
+| `BudgetModule`      | Reusable monthly category budget template GraphQL                            |
 | `CronModule`        | Secured REST webhook for hourly batch processing                             |
 
 ### REST endpoints
@@ -174,6 +178,8 @@ All client-facing operations are exposed through GraphQL at `/graphql`.
 | Query    | `summaryCategoryKeys`         | JWT    | Closed English category vocabulary for manual backfill UI                                        |
 | Mutation | `createManualSummary`         | JWT    | Create historical analytics (`source = MANUAL`) for any ended month (`period < current YYYY-MM`) |
 | Mutation | `updateManualSummary`         | JWT    | Update an existing analytics row for an ended month (scheduled or manual)                        |
+| Query    | `myMonthlyBudget`             | JWT    | Current reusable monthly category budget (`null` if never saved)                                 |
+| Mutation | `saveMonthlyBudget`           | JWT    | Upsert the user's monthly category budget template (persists until overwritten)                  |
 | Mutation | `deleteMyAccount`             | JWT    | Delete Supabase Auth identity, profile data, and uploaded expense file                           |
 | Mutation | `scanReceipt`                 | JWT    | Upload receipt image (JPEG/PNG/WEBP, max 5MB, base64); returns `{ extractedText }`               |
 | Mutation | `approveReceiptExpenses`      | JWT    | Append edited receipt expense text to the user's uploaded expense file                           |

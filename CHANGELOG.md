@@ -7,4 +7,13 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Sections are generated automatically by `.github/workflows/release.yml` on each push to `production`.
 
-<!-- New release sections are prepended above this line. -->
+## [0.0.19] - 2026-08-19
+
+### Features
+- add reusable monthly category budget API (#44)
+- automate CHANGELOG.md on production releases (#43)
+
+### Other
+- chore: retrigger production release
+- add changelog to pipeline
+

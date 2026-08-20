@@ -93,14 +93,15 @@ Closed category keys: `Bills`, `Groceries`, `DiningOut`, `Transport`, `Education
 
 Reusable monthly category budget template. One row per user; persists until the user overwrites it (a new calendar month does not reset it).
 
-| Field        | Type        | Description                                           |
-| ------------ | ----------- | ----------------------------------------------------- |
-| `id`         | `String` PK | Budget row id                                         |
-| `user_id`    | `String` UK | Owner id (one budget per user)                        |
-| `currency`   | `String`    | Budget currency (same closed list as report currency) |
-| `categories` | `Json`      | Array of canonical category keys with planned cents   |
-| `created_at` | `DateTime`  | First insert timestamp                                |
-| `updated_at` | `DateTime`  | Last overwrite timestamp                              |
+| Field           | Type        | Description                                            |
+| --------------- | ----------- | ------------------------------------------------------ |
+| `id`            | `String` PK | Budget row id                                          |
+| `user_id`       | `String` UK | Owner id (one budget per user)                         |
+| `currency`      | `String`    | Budget currency (same closed list as report currency)  |
+| `categories`    | `Json`      | Array of canonical category keys with planned cents    |
+| `extra_expense` | `Json?`     | Optional one-off extra expense funded by category cuts |
+| `created_at`    | `DateTime`  | First insert timestamp                                 |
+| `updated_at`    | `DateTime`  | Last overwrite timestamp                               |
 
 Unique constraint: `user_id`.
 
@@ -111,6 +112,18 @@ Unique constraint: `user_id`.
 ```
 
 Omitted keys are treated as `0` by the client. Amounts must be non-negative integers.
+
+`extra_expense` is `null` when no extra expense is active. JSON shape when set:
+
+```json
+{
+  "name": "Car repair",
+  "amountCents": 200000,
+  "cuts": [{ "key": "Groceries", "cutPercent": 10 }]
+}
+```
+
+Only categories with a non-zero cut need entries. `cutPercent` is an integer 1–100. Saving the budget with `extraExpense: null` clears the stored extra expense.
 
 ### `Template`
 
@@ -245,6 +258,7 @@ erDiagram
     string user_id UK
     string currency
     json categories
+    json extra_expense
     datetime created_at
     datetime updated_at
   }
@@ -295,17 +309,18 @@ erDiagram
 
 ## Migrations
 
-| Migration                                   | Description                                                                                               |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `20260603205715_init`                       | Initial `User` + `Template` schema                                                                        |
-| `20260604120000_drop_active_template_fk`    | Placeholder migration to keep history consistent                                                          |
-| `20260605133200_add_data_sources`           | Adds `DataSourceType`, `data_source_type`, `data_source_config`; migrates and drops `nextcloud_file_path` |
-| `20260614120000_add_summary_schedule`       | Adds summary schedule fields on `User`, `SummaryLog`, and `SummaryLogStatus` enum                         |
-| `20260614200000_add_summary_email_language` | Adds `summary_email_language` (`PL` / `EN`) on `User`                                                     |
-| `20260715193600_add_summary_currency`       | Adds the preferred summary report currency (default `PLN`)                                                |
-| `20260801120000_add_ai_usage_tracking`      | Adds `ai_credit_limit` on `User`, `AiUsageLog`, `AiActionType`, and `AiUsageTrigger`                      |
-| `20260805194853_add_summary_analytics`      | Adds `SummaryAnalytics` table and `SummaryAnalyticsSource` enum                                           |
-| `20260819213000_add_monthly_budget`         | Adds `MonthlyBudget` table (one reusable category budget template per user)                               |
+| Migration                                            | Description                                                                                               |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `20260603205715_init`                                | Initial `User` + `Template` schema                                                                        |
+| `20260604120000_drop_active_template_fk`             | Placeholder migration to keep history consistent                                                          |
+| `20260605133200_add_data_sources`                    | Adds `DataSourceType`, `data_source_type`, `data_source_config`; migrates and drops `nextcloud_file_path` |
+| `20260614120000_add_summary_schedule`                | Adds summary schedule fields on `User`, `SummaryLog`, and `SummaryLogStatus` enum                         |
+| `20260614200000_add_summary_email_language`          | Adds `summary_email_language` (`PL` / `EN`) on `User`                                                     |
+| `20260715193600_add_summary_currency`                | Adds the preferred summary report currency (default `PLN`)                                                |
+| `20260801120000_add_ai_usage_tracking`               | Adds `ai_credit_limit` on `User`, `AiUsageLog`, `AiActionType`, and `AiUsageTrigger`                      |
+| `20260805194853_add_summary_analytics`               | Adds `SummaryAnalytics` table and `SummaryAnalyticsSource` enum                                           |
+| `20260819213000_add_monthly_budget`                  | Adds `MonthlyBudget` table (one reusable category budget template per user)                               |
+| `20260820200000_add_extra_expense_to_monthly_budget` | Adds nullable `extra_expense` JSON on `MonthlyBudget` (one-off expense + category cut percents)           |
 
 ## Business rules
 

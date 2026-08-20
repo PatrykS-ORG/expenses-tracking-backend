@@ -112,12 +112,13 @@ model Template {
 }
 
 model MonthlyBudget {
-  id         String   @id @default(uuid())
-  user_id    String   @unique
-  currency   String
-  categories Json
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id            String   @id @default(uuid())
+  user_id       String   @unique
+  currency      String
+  categories    Json
+  extra_expense Json?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }

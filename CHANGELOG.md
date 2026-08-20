@@ -7,6 +7,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Sections are generated automatically by `.github/workflows/release.yml` on each push to `production`.
 
+## [0.0.20] - 2026-08-20
+
+### Features
+- persist an optional extra expense on the monthly budget (#46)
+
 ## [0.0.19] - 2026-08-19
 
 ### Features
@@ -16,4 +21,3 @@ Sections are generated automatically by `.github/workflows/release.yml` on each 
 ### Other
 - chore: retrigger production release
 - add changelog to pipeline
-

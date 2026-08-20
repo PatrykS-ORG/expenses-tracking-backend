@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { BudgetService } from './budget.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserProfileService } from '../users/user-profile.service';
+import { Prisma } from '../generated/prisma/client';
 
 describe('BudgetService', () => {
   let service: BudgetService;
@@ -18,13 +19,25 @@ describe('BudgetService', () => {
     ensureUserProfile: jest.fn(),
   };
 
+  const extraExpense = {
+    name: 'Car repair',
+    amountCents: 200_000,
+    cuts: [{ key: 'Groceries', cutPercent: 10 }],
+  };
+
   const storedRow = {
     id: 'budget-1',
     user_id: 'user-1',
     currency: 'PLN',
     categories: [{ key: 'Groceries', amountCents: 80_000 }],
+    extra_expense: null,
     created_at: new Date('2026-08-01T00:00:00.000Z'),
     updated_at: new Date('2026-08-19T00:00:00.000Z'),
+  };
+
+  const storedRowWithExtra = {
+    ...storedRow,
+    extra_expense: extraExpense,
   };
 
   beforeEach(async () => {
@@ -63,6 +76,7 @@ describe('BudgetService', () => {
       id: 'budget-1',
       currency: 'PLN',
       categories: [{ key: 'Groceries', amountCents: 80_000 }],
+      extraExpense: null,
       updatedAt: storedRow.updated_at,
     });
   });
@@ -81,10 +95,12 @@ describe('BudgetService', () => {
         user_id: 'user-1',
         currency: 'PLN',
         categories: [{ key: 'Groceries', amountCents: 80_000 }],
+        extra_expense: Prisma.DbNull,
       },
       update: {
         currency: 'PLN',
         categories: [{ key: 'Groceries', amountCents: 80_000 }],
+        extra_expense: Prisma.DbNull,
       },
     });
     expect(result.id).toBe('budget-1');
@@ -125,6 +141,156 @@ describe('BudgetService', () => {
       service.saveMonthlyBudget('user-1', 'a@b.c', {
         currency: 'BTC',
         categories: [{ key: 'Groceries', amountCents: 100 }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('maps a stored extra expense when a row exists', async () => {
+    prismaMock.monthlyBudget.findUnique.mockResolvedValue(storedRowWithExtra);
+
+    const result = await service.getMyMonthlyBudget('user-1', 'a@b.c');
+
+    expect(result?.extraExpense).toEqual(extraExpense);
+  });
+
+  it('upserts a valid extra expense', async () => {
+    prismaMock.monthlyBudget.upsert.mockResolvedValue(storedRowWithExtra);
+
+    const result = await service.saveMonthlyBudget('user-1', 'a@b.c', {
+      currency: 'PLN',
+      categories: [{ key: 'Groceries', amountCents: 80_000 }],
+      extraExpense: {
+        name: '  Car repair  ',
+        amountCents: 200_000,
+        cuts: [{ key: 'Groceries', cutPercent: 10 }],
+      },
+    });
+
+    expect(prismaMock.monthlyBudget.upsert).toHaveBeenCalledWith({
+      where: { user_id: 'user-1' },
+      create: {
+        user_id: 'user-1',
+        currency: 'PLN',
+        categories: [{ key: 'Groceries', amountCents: 80_000 }],
+        extra_expense: extraExpense,
+      },
+      update: {
+        currency: 'PLN',
+        categories: [{ key: 'Groceries', amountCents: 80_000 }],
+        extra_expense: extraExpense,
+      },
+    });
+    expect(result.extraExpense).toEqual(extraExpense);
+  });
+
+  it('clears the extra expense when extraExpense is null', async () => {
+    prismaMock.monthlyBudget.upsert.mockResolvedValue(storedRow);
+
+    await service.saveMonthlyBudget('user-1', 'a@b.c', {
+      currency: 'PLN',
+      categories: [{ key: 'Groceries', amountCents: 80_000 }],
+      extraExpense: null,
+    });
+
+    expect(prismaMock.monthlyBudget.upsert).toHaveBeenCalledWith({
+      where: { user_id: 'user-1' },
+      create: {
+        user_id: 'user-1',
+        currency: 'PLN',
+        categories: [{ key: 'Groceries', amountCents: 80_000 }],
+        extra_expense: Prisma.DbNull,
+      },
+      update: {
+        currency: 'PLN',
+        categories: [{ key: 'Groceries', amountCents: 80_000 }],
+        extra_expense: Prisma.DbNull,
+      },
+    });
+  });
+
+  it('rejects an empty extra expense name', async () => {
+    await expect(
+      service.saveMonthlyBudget('user-1', 'a@b.c', {
+        currency: 'PLN',
+        categories: [{ key: 'Groceries', amountCents: 80_000 }],
+        extraExpense: {
+          name: '   ',
+          amountCents: 200_000,
+          cuts: [],
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects an extra expense name over 100 characters', async () => {
+    await expect(
+      service.saveMonthlyBudget('user-1', 'a@b.c', {
+        currency: 'PLN',
+        categories: [{ key: 'Groceries', amountCents: 80_000 }],
+        extraExpense: {
+          name: 'x'.repeat(101),
+          amountCents: 200_000,
+          cuts: [],
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects a non-positive extra expense amount', async () => {
+    await expect(
+      service.saveMonthlyBudget('user-1', 'a@b.c', {
+        currency: 'PLN',
+        categories: [{ key: 'Groceries', amountCents: 80_000 }],
+        extraExpense: {
+          name: 'Car repair',
+          amountCents: 0,
+          cuts: [],
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects an invalid extra expense cut key', async () => {
+    await expect(
+      service.saveMonthlyBudget('user-1', 'a@b.c', {
+        currency: 'PLN',
+        categories: [{ key: 'Groceries', amountCents: 80_000 }],
+        extraExpense: {
+          name: 'Car repair',
+          amountCents: 200_000,
+          cuts: [{ key: 'Food', cutPercent: 10 }],
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects a duplicate extra expense cut key', async () => {
+    await expect(
+      service.saveMonthlyBudget('user-1', 'a@b.c', {
+        currency: 'PLN',
+        categories: [{ key: 'Groceries', amountCents: 80_000 }],
+        extraExpense: {
+          name: 'Car repair',
+          amountCents: 200_000,
+          cuts: [
+            { key: 'Groceries', cutPercent: 10 },
+            { key: 'Groceries', cutPercent: 20 },
+          ],
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects an out-of-range extra expense cut percent', async () => {
+    await expect(
+      service.saveMonthlyBudget('user-1', 'a@b.c', {
+        currency: 'PLN',
+        categories: [{ key: 'Groceries', amountCents: 80_000 }],
+        extraExpense: {
+          name: 'Car repair',
+          amountCents: 200_000,
+          cuts: [{ key: 'Groceries', cutPercent: 0 }],
+        },
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });

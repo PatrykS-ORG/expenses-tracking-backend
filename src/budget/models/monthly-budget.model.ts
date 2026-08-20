@@ -9,6 +9,27 @@ export class MonthlyBudgetCategoryModel {
   amountCents!: number;
 }
 
+@ObjectType('ExtraExpenseCut')
+export class ExtraExpenseCutModel {
+  @Field()
+  key!: string;
+
+  @Field(() => Int)
+  cutPercent!: number;
+}
+
+@ObjectType('ExtraExpense')
+export class ExtraExpenseModel {
+  @Field()
+  name!: string;
+
+  @Field(() => Int)
+  amountCents!: number;
+
+  @Field(() => [ExtraExpenseCutModel])
+  cuts!: ExtraExpenseCutModel[];
+}
+
 @ObjectType('MonthlyBudget')
 export class MonthlyBudgetModel {
   @Field()
@@ -19,6 +40,9 @@ export class MonthlyBudgetModel {
 
   @Field(() => [MonthlyBudgetCategoryModel])
   categories!: MonthlyBudgetCategoryModel[];
+
+  @Field(() => ExtraExpenseModel, { nullable: true })
+  extraExpense!: ExtraExpenseModel | null;
 
   @Field()
   updatedAt!: Date;

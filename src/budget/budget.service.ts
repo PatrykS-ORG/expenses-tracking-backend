@@ -2,11 +2,17 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserProfileService } from '../users/user-profile.service';
 import { isValidCategoryKey } from '../summary/summary-category.constants';
-import { SaveMonthlyBudgetInput } from './dto/save-monthly-budget.input';
+import {
+  ExtraExpenseInput,
+  SaveMonthlyBudgetInput,
+} from './dto/save-monthly-budget.input';
 import {
   budgetCategoriesToPrismaJson,
+  extraExpenseToPrismaJson,
   MonthlyBudgetRecord,
   StoredBudgetCategory,
+  StoredExtraExpense,
+  StoredExtraExpenseCut,
   toMonthlyBudgetModel,
 } from './budget.mapper';
 import { MonthlyBudgetModel } from './models/monthly-budget.model';
@@ -21,6 +27,8 @@ const SUPPORTED_BUDGET_CURRENCIES = [
   'UAH',
 ] as const;
 
+const EXTRA_EXPENSE_NAME_MAX_LENGTH = 100;
+
 type MonthlyBudgetDelegate = {
   findUnique: (args: {
     where: { user_id: string };
@@ -31,10 +39,12 @@ type MonthlyBudgetDelegate = {
       user_id: string;
       currency: string;
       categories: ReturnType<typeof budgetCategoriesToPrismaJson>;
+      extra_expense: ReturnType<typeof extraExpenseToPrismaJson>;
     };
     update: {
       currency: string;
       categories: ReturnType<typeof budgetCategoriesToPrismaJson>;
+      extra_expense: ReturnType<typeof extraExpenseToPrismaJson>;
     };
   }) => Promise<MonthlyBudgetRecord>;
 };
@@ -73,6 +83,8 @@ export class BudgetService {
 
     const currency = this.parseCurrency(input.currency);
     const categories = this.parseCategories(input.categories);
+    const extraExpense = this.parseExtraExpense(input.extraExpense);
+    const extraExpenseJson = extraExpenseToPrismaJson(extraExpense);
 
     const row = await monthlyBudgetDelegate(this.prisma).upsert({
       where: { user_id: userId },
@@ -80,10 +92,12 @@ export class BudgetService {
         user_id: userId,
         currency,
         categories: budgetCategoriesToPrismaJson(categories),
+        extra_expense: extraExpenseJson,
       },
       update: {
         currency,
         categories: budgetCategoriesToPrismaJson(categories),
+        extra_expense: extraExpenseJson,
       },
     });
 
@@ -135,5 +149,65 @@ export class BudgetService {
     }
 
     return categories;
+  }
+
+  private parseExtraExpense(
+    input: ExtraExpenseInput | null | undefined,
+  ): StoredExtraExpense | null {
+    if (input == null) {
+      return null;
+    }
+
+    const name = input.name.trim();
+    if (name.length === 0) {
+      throw new BadRequestException('Extra expense name is required');
+    }
+    if (name.length > EXTRA_EXPENSE_NAME_MAX_LENGTH) {
+      throw new BadRequestException(
+        `Extra expense name must be at most ${EXTRA_EXPENSE_NAME_MAX_LENGTH} characters`,
+      );
+    }
+    if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) {
+      throw new BadRequestException(
+        'Extra expense amount must be a positive integer in cents',
+      );
+    }
+
+    const seenKeys = new Set<string>();
+    const cuts: StoredExtraExpenseCut[] = [];
+
+    for (const [index, cut] of input.cuts.entries()) {
+      if (!isValidCategoryKey(cut.key)) {
+        throw new BadRequestException(
+          `Invalid extra expense cut key at position ${index + 1}`,
+        );
+      }
+      if (seenKeys.has(cut.key)) {
+        throw new BadRequestException(
+          `Duplicate extra expense cut key: ${cut.key}`,
+        );
+      }
+      if (
+        !Number.isInteger(cut.cutPercent) ||
+        cut.cutPercent < 1 ||
+        cut.cutPercent > 100
+      ) {
+        throw new BadRequestException(
+          `Invalid cut percent for ${cut.key}: must be an integer from 1 to 100`,
+        );
+      }
+
+      seenKeys.add(cut.key);
+      cuts.push({
+        key: cut.key,
+        cutPercent: cut.cutPercent,
+      });
+    }
+
+    return {
+      name,
+      amountCents: input.amountCents,
+      cuts,
+    };
   }
 }

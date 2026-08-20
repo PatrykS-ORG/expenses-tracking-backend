@@ -107,6 +107,28 @@ input ExpenseFileUploadInput {
   mimeType: String!
 }
 
+type ExtraExpense {
+  amountCents: Int!
+  cuts: [ExtraExpenseCut!]!
+  name: String!
+}
+
+type ExtraExpenseCut {
+  cutPercent: Int!
+  key: String!
+}
+
+input ExtraExpenseCutInput {
+  cutPercent: Int!
+  key: String!
+}
+
+input ExtraExpenseInput {
+  amountCents: Int!
+  cuts: [ExtraExpenseCutInput!]!
+  name: String!
+}
+
 input GenerateTemplateInput {
   detailLevel: String!
   focus: String!
@@ -128,6 +150,7 @@ input ManualSummaryCategoryItemInput {
 type MonthlyBudget {
   categories: [MonthlyBudgetCategory!]!
   currency: String!
+  extraExpense: ExtraExpense
   id: String!
   updatedAt: DateTime!
 }
@@ -204,6 +227,7 @@ input SaveCurrentMonthExpensesInput {
 input SaveMonthlyBudgetInput {
   categories: [MonthlyBudgetCategoryInput!]!
   currency: String!
+  extraExpense: ExtraExpenseInput
 }
 
 input ScanReceiptInput {

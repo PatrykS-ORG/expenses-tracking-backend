@@ -13,6 +13,8 @@ export function expenseSummaryToTemplateValues(
     currentMonth: summary.currentMonth?.trim() || '',
     salaryAmount: summary.salaryAmount?.trim() || '',
     totalExpenses: summary.totalExpenses?.trim() || '',
+    spendingAmount: summary.spendingAmount?.trim() || '',
+    investedAmount: summary.investedAmount?.trim() || '',
     savingsAmount: summary.savingsAmount?.trim() || '',
     savingsMessage: summary.savingsMessage?.trim() || '',
     expensesList: summary.expensesList?.trim() || '',

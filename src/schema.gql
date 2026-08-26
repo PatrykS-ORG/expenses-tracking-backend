@@ -246,9 +246,11 @@ type SuggestExpenseCategoriesResult {
 
 type SummaryAnalyticsModel {
   categories: [SummaryCategoryModel!]!
+  consumptionSpentCents: Int!
   createdAt: DateTime!
   currency: String!
   id: String!
+  investedCents: Int!
   period: String!
   salaryCents: Int!
   savingsCents: Int!

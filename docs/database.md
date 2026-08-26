@@ -58,20 +58,20 @@ Unique constraint: `(user_id, period)`.
 
 Queryable monthly expense analytics for the dashboard (separate from email idempotency in `SummaryLog`).
 
-| Field                  | Type                     | Description                                          |
-| ---------------------- | ------------------------ | ---------------------------------------------------- |
-| `id`                   | `String` PK              | Analytics row id                                     |
-| `user_id`              | `String` FK              | Owner id                                             |
-| `period`               | `String`                 | Summary period key, e.g. `2026-05`                   |
-| `source`               | `SummaryAnalyticsSource` | `SCHEDULED` (cron email) or `MANUAL` (user backfill) |
-| `currency`             | `String`                 | Snapshot of report currency at write time            |
-| `salary_cents`         | `Int`                    | Salary in minor units                                |
-| `total_expenses_cents` | `Int`                    | Total expenses in minor units                        |
-| `savings_cents`        | `Int`                    | `salary_cents - total_expenses_cents`                |
-| `savings_message`      | `String?`                | Optional narrative                                   |
-| `categories`           | `Json`                   | Array of canonical category buckets with line items  |
-| `created_at`           | `DateTime`               | First insert timestamp                               |
-| `updated_at`           | `DateTime`               | Last update timestamp (manual edits bump this)       |
+| Field                  | Type                     | Description                                                          |
+| ---------------------- | ------------------------ | -------------------------------------------------------------------- |
+| `id`                   | `String` PK              | Analytics row id                                                     |
+| `user_id`              | `String` FK              | Owner id                                                             |
+| `period`               | `String`                 | Summary period key, e.g. `2026-05`                                   |
+| `source`               | `SummaryAnalyticsSource` | `SCHEDULED` (cron email) or `MANUAL` (user backfill)                 |
+| `currency`             | `String`                 | Snapshot of report currency at write time                            |
+| `salary_cents`         | `Int`                    | Salary in minor units                                                |
+| `total_expenses_cents` | `Int`                    | Total expenses in minor units                                        |
+| `savings_cents`        | `Int`                    | `salary_cents - total_expenses_cents` (free savings / leftover cash) |
+| `savings_message`      | `String?`                | Optional narrative                                                   |
+| `categories`           | `Json`                   | Array of canonical category buckets with line items                  |
+| `created_at`           | `DateTime`               | First insert timestamp                                               |
+| `updated_at`           | `DateTime`               | Last update timestamp (manual edits bump this)                       |
 
 Unique constraint: `(user_id, period)`.
 
@@ -88,6 +88,8 @@ Unique constraint: `(user_id, period)`.
 ```
 
 Closed category keys: `Bills`, `Groceries`, `DiningOut`, `Transport`, `Education`, `Entertainment`, `Investments`, `Car`, `Clothing`, `Snacks`, `Health`, `Travel`, `Gifts`, `Other`.
+
+GraphQL `SummaryAnalyticsModel` additionally exposes derived `investedCents` (sum of `Investments`) and `consumptionSpentCents` (`total_expenses_cents - investedCents`). Those fields are not stored.
 
 ### `MonthlyBudget`
 

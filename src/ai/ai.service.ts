@@ -36,7 +36,7 @@ Create a personalized monthly expense summary email template in clean, responsiv
 Do not wrap your response in markdown blocks like \`\`\`html, just output the raw HTML.
 The HTML should contain placeholders for dynamic data injected later.
 Use these placeholders exactly as written:
-{{ userName }}, {{ currentMonth }}, {{ salaryAmount }}, {{ totalExpenses }}, {{ savingsAmount }}, {{ savingsMessage }}, {{ expensesList }}
+{{ userName }}, {{ currentMonth }}, {{ salaryAmount }}, {{ totalExpenses }}, {{ spendingAmount }}, {{ investedAmount }}, {{ savingsAmount }}, {{ savingsMessage }}, {{ expensesList }}
 
 Ensure the design is responsive and looks good on mobile devices.
 The output MUST be only raw HTML code starting with <!DOCTYPE html>.`;
@@ -70,12 +70,13 @@ Categorization rules (critical):
 6) Use the English category names exactly as listed above (not translated labels).
 
 savingsMessage rules (critical — do NOT just restate totals):
-1) Name the category that consumed the largest share of salary, with its percentage (use the provided totals).
+1) Name the category that consumed the largest share of salary, with its percentage (use the provided totals). Ignore the Investments category when naming the largest consumption share — investing is saving, not spending.
 2) Name the single most expensive individual expense with its exact amount from the canonical list.
-3) Identify the category where cost reduction is most realistic and give a brief, actionable recommendation.
-4) Optionally mention a positive trend if visible.
+3) Identify the category where cost reduction is most realistic and give a brief, actionable recommendation. Do not recommend cutting Investments.
+4) Optionally mention a positive trend if visible, including money put into Investments.
 5) Keep the tone friendly and motivating — no lecturing. 3-5 sentences max.
 6) Use ONLY amounts provided in the user message — never invent or round them.
+7) Treat the Investments category as saving/investing, not as consumption spending.
 
 Formatting rules:
 1) Return JSON only — no markdown, no HTML, no commentary.
@@ -484,6 +485,8 @@ ${canonicalList}`,
           currentMonth: formatSummaryMonth(resolvedLanguage, period ?? ''),
           salaryAmount: reconciled.salaryAmount,
           totalExpenses: reconciled.totalExpenses,
+          spendingAmount: reconciled.spendingAmount,
+          investedAmount: reconciled.investedAmount,
           savingsAmount: reconciled.savingsAmount,
           savingsMessage: aiResult.savingsMessage,
           expensesList: buildExpensesListHtml(
@@ -823,8 +826,9 @@ ${canonicalList}`,
     return [
       `Computed totals (authoritative — use these exact figures in savingsMessage):`,
       `- salaryAmount: ${formatMoneyAmount(salaryCents, language, currency)}`,
-      `- totalExpenses: ${formatMoneyAmount(totalExpensesCents, language, currency)}`,
-      `- savingsAmount (salary - expenses, may be negative): ${formatMoneyAmount(savingsCents, language, currency)}`,
+      `- totalExpenses (all outflows, including Investments): ${formatMoneyAmount(totalExpensesCents, language, currency)}`,
+      `- savingsAmount (salary - totalExpenses, leftover cash / free savings, may be negative): ${formatMoneyAmount(savingsCents, language, currency)}`,
+      `- Treat Investments as saving, not consumption spending.`,
       largest
         ? `- largest single expense: ${largest.name} — ${formatMoneyAmount(largest.amountCents, language, currency)}`
         : '',

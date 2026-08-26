@@ -5,6 +5,7 @@ import {
   StoredSummaryCategoryItem,
   SummaryCategoryKey,
   normalizeCategoryName,
+  sumInvestedCents,
 } from './summary-category.constants';
 import { SummaryAnalyticsModel } from './models/summary-analytics.model';
 import { SummaryAnalyticsSourceEnum } from './models/summary-analytics-source.enum';
@@ -108,6 +109,7 @@ export function categoriesToPrismaJson(
 export function toSummaryAnalyticsModel(
   record: SummaryAnalyticsRecord,
 ): SummaryAnalyticsModel {
+  const investedCents = sumInvestedCents(record.categories);
   return {
     id: record.id,
     period: record.period,
@@ -115,6 +117,8 @@ export function toSummaryAnalyticsModel(
     currency: record.currency,
     salaryCents: record.salaryCents,
     totalExpensesCents: record.totalExpensesCents,
+    investedCents,
+    consumptionSpentCents: record.totalExpensesCents - investedCents,
     savingsCents: record.savingsCents,
     savingsMessage: record.savingsMessage,
     categories: record.categories.map((category) => ({

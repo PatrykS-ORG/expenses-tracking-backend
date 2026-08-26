@@ -61,4 +61,27 @@ describe('reconcileExpenseAnalysis', () => {
     expect(result.savingsCents).toBe(200_000 - 234_700);
     expect(result.savingsAmount).toBe('-347,00 zł');
   });
+
+  it('splits Investments out of consumption spending by canonical key', () => {
+    const result = reconcileExpenseAnalysis(
+      [
+        { id: 1, name: 'ETF VWCE', amountCents: 100_000 },
+        { id: 2, name: 'Biedronka', amountCents: 50_000 },
+      ],
+      [
+        { name: 'Investments', itemIds: [1] },
+        { name: 'Groceries', itemIds: [2] },
+      ],
+      300_000,
+      SummaryEmailLanguage.EN,
+      'PLN',
+    );
+
+    expect(result.totalExpensesCents).toBe(150_000);
+    expect(result.investedCents).toBe(100_000);
+    expect(result.consumptionSpentCents).toBe(50_000);
+    expect(result.savingsCents).toBe(150_000);
+    expect(result.investedAmount).toBe('1,000.00 PLN');
+    expect(result.spendingAmount).toBe('500.00 PLN');
+  });
 });

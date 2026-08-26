@@ -17,7 +17,14 @@ export const CANONICAL_CATEGORY_KEYS = [
 
 export type SummaryCategoryKey = (typeof CANONICAL_CATEGORY_KEYS)[number];
 
+/** Canonical keys whose outflow is treated as investing/saving, not consumption. */
+export const SAVINGS_LIKE_CATEGORY_KEYS = ['Investments'] as const;
+
+export type SavingsLikeCategoryKey =
+  (typeof SAVINGS_LIKE_CATEGORY_KEYS)[number];
+
 const CATEGORY_KEY_SET = new Set<string>(CANONICAL_CATEGORY_KEYS);
+const SAVINGS_LIKE_KEY_SET = new Set<string>(SAVINGS_LIKE_CATEGORY_KEYS);
 
 /**
  * Lowercased aliases → canonical key.
@@ -138,6 +145,22 @@ const CATEGORY_ALIASES: Record<string, SummaryCategoryKey> = {
 
 export function isValidCategoryKey(value: string): value is SummaryCategoryKey {
   return CATEGORY_KEY_SET.has(value);
+}
+
+export function isSavingsLikeCategory(
+  value: string,
+): value is SavingsLikeCategoryKey {
+  return SAVINGS_LIKE_KEY_SET.has(value);
+}
+
+export function sumInvestedCents(
+  categories: Array<{ name: string; totalCents: number }>,
+): number {
+  return categories.reduce(
+    (sum, category) =>
+      isSavingsLikeCategory(category.name) ? sum + category.totalCents : sum,
+    0,
+  );
 }
 
 export function normalizeCategoryName(value: string): SummaryCategoryKey {

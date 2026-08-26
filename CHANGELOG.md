@@ -7,6 +7,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Sections are generated automatically by `.github/workflows/release.yml` on each push to `production`.
 
+## [0.0.21] - 2026-08-26
+
+### Features
+- treat Investments as saving in analytics and summary email (#48)
+
 ## [0.0.20] - 2026-08-20
 
 ### Features

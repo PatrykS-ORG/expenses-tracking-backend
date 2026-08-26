@@ -2,6 +2,10 @@ import { SummaryEmailLanguage } from '../generated/prisma/client';
 import { ExpenseCategory } from './expense-analysis.types';
 import { formatMoneyAmount } from './expense-amount.formatter';
 import { CanonicalExpense } from './expense-file.parser';
+import {
+  isSavingsLikeCategory,
+  normalizeCategoryName,
+} from '../summary/summary-category.constants';
 
 export interface AiCategoryAssignment {
   name: string;
@@ -11,9 +15,13 @@ export interface AiCategoryAssignment {
 export interface ReconciledExpenseAnalysis {
   salaryAmount: string;
   totalExpenses: string;
+  spendingAmount: string;
+  investedAmount: string;
   savingsAmount: string;
   categories: ExpenseCategory[];
   totalExpensesCents: number;
+  consumptionSpentCents: number;
+  investedCents: number;
   salaryCents: number;
   savingsCents: number;
 }
@@ -38,6 +46,7 @@ export function reconcileExpenseAnalysis(
   const byId = new Map(expenses.map((expense) => [expense.id, expense]));
   const assignedIds = new Set<number>();
   const categories: ExpenseCategory[] = [];
+  let investedCents = 0;
 
   for (const aiCategory of aiCategories) {
     const categoryName = aiCategory.name?.trim();
@@ -73,6 +82,10 @@ export function reconcileExpenseAnalysis(
       continue;
     }
 
+    if (isSavingsLikeCategory(normalizeCategoryName(categoryName))) {
+      investedCents += totalCents;
+    }
+
     categories.push({
       name: categoryName,
       total: formatMoneyAmount(totalCents, language, currency),
@@ -102,14 +115,23 @@ export function reconcileExpenseAnalysis(
     (sum, expense) => sum + expense.amountCents,
     0,
   );
+  const consumptionSpentCents = totalExpensesCents - investedCents;
   const savingsCents = salaryCents - totalExpensesCents;
 
   return {
     salaryAmount: formatMoneyAmount(salaryCents, language, currency),
     totalExpenses: formatMoneyAmount(totalExpensesCents, language, currency),
+    spendingAmount: formatMoneyAmount(
+      consumptionSpentCents,
+      language,
+      currency,
+    ),
+    investedAmount: formatMoneyAmount(investedCents, language, currency),
     savingsAmount: formatMoneyAmount(savingsCents, language, currency),
     categories,
     totalExpensesCents,
+    consumptionSpentCents,
+    investedCents,
     salaryCents,
     savingsCents,
   };

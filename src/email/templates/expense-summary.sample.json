@@ -4,6 +4,8 @@
     "currentMonth": "czerwiec 2026",
     "salaryAmount": "8 500,00 zł",
     "totalExpenses": "6 230,45 zł",
+    "spendingAmount": "5 430,45 zł",
+    "investedAmount": "800,00 zł",
     "savingsAmount": "2 269,55 zł",
     "savingsMessage": "W tym miesiącu wydałeś 73,3% swojej wypłaty. Największy udział miały zakupy spożywcze i dom (17,1%). Na koniec miesiąca zostało Ci 2 269,55 zł — to dobry wynik. W kolejnym miesiącu warto zwrócić uwagę na koszty transportu.",
     "categories": [
@@ -45,6 +47,8 @@
     "currentMonth": "June 2026",
     "salaryAmount": "8,500.00 PLN",
     "totalExpenses": "6,230.45 PLN",
+    "spendingAmount": "5,430.45 PLN",
+    "investedAmount": "800.00 PLN",
     "savingsAmount": "2,269.55 PLN",
     "savingsMessage": "You spent 73.3% of your salary this month. The largest share went to food and home (17.1%). You still have 2,269.55 PLN left — a solid result. Next month, it is worth keeping an eye on transport costs.",
     "categories": [

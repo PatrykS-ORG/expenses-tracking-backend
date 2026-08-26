@@ -12,6 +12,8 @@ export interface TemplateRenderValues {
   currentMonth: string;
   salaryAmount: string;
   totalExpenses: string;
+  spendingAmount: string;
+  investedAmount: string;
   savingsAmount: string;
   savingsMessage: string;
   expensesList: string;
@@ -53,6 +55,8 @@ export function getExampleTemplateValues(
       currentMonth,
       salaryAmount,
       totalExpenses,
+      spendingAmount: '5,430.45 PLN',
+      investedAmount: '800.00 PLN',
       savingsAmount,
       savingsMessage:
         'The largest share of your salary went to Bills & subscriptions (22.0%), driven mainly by rent. Your single most expensive item was Rent & utilities at 1,450.00 PLN. For the quickest savings, look at Entertainment (420.00 PLN) — cutting one restaurant visit could free up 200+ PLN next month.',
@@ -116,6 +120,8 @@ export function getExampleTemplateValues(
     currentMonth,
     salaryAmount,
     totalExpenses,
+    spendingAmount: '5 430,45 zł',
+    investedAmount: '800,00 zł',
     savingsAmount,
     savingsMessage:
       'Największą część wypłaty pochłonęły Rachunki i subskrypcje (22,0%) — tu dominuje czynsz. Najdroższy pojedynczy wydatek to Czynsz i media — 1 450,00 zł. Najszybciej zaoszczędzisz w kategorii Rozrywka (420,00 zł) — rezygnacja z jednej wizyty w restauracji to ponad 200 zł mniej w następnym miesiącu.',

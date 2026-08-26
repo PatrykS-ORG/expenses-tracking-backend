@@ -8,6 +8,8 @@ describe('expenseSummaryToTemplateValues', () => {
         currentMonth: 'maj 2026',
         salaryAmount: '6500 PLN',
         totalExpenses: '4200 PLN',
+        spendingAmount: '3500 PLN',
+        investedAmount: '700 PLN',
         savingsAmount: '2300 PLN',
         savingsMessage: 'Dobra robota',
         expensesList: '<li>Jedzenie: 1200 PLN</li>',
@@ -18,6 +20,8 @@ describe('expenseSummaryToTemplateValues', () => {
     expect(values.userName).toBe('Patryk');
     expect(values.currentMonth).toBe('maj 2026');
     expect(values.salaryAmount).toBe('6500 PLN');
+    expect(values.spendingAmount).toBe('3500 PLN');
+    expect(values.investedAmount).toBe('700 PLN');
     expect(values.expensesList).toContain('Jedzenie');
   });
 
@@ -28,6 +32,8 @@ describe('expenseSummaryToTemplateValues', () => {
         currentMonth: '',
         salaryAmount: '',
         totalExpenses: '',
+        spendingAmount: '',
+        investedAmount: '',
         savingsAmount: '',
         savingsMessage: '',
         expensesList: '',

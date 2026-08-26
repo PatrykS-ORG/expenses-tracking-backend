@@ -140,6 +140,8 @@ describe('SummaryService', () => {
         currentMonth: 'July 2026',
         salaryAmount: '3,000.00 EUR',
         totalExpenses: '100.00 EUR',
+        spendingAmount: '100.00 EUR',
+        investedAmount: '0.00 EUR',
         savingsAmount: '2,900.00 EUR',
         savingsMessage: 'A useful summary.',
         expensesList: '<p>Groceries: 100.00 EUR</p>',

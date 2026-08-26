@@ -43,6 +43,12 @@ export class SummaryAnalyticsModel {
   totalExpensesCents!: number;
 
   @Field(() => Int)
+  investedCents!: number;
+
+  @Field(() => Int)
+  consumptionSpentCents!: number;
+
+  @Field(() => Int)
   savingsCents!: number;
 
   @Field(() => String, { nullable: true })

@@ -84,4 +84,63 @@ describe('reconcileExpenseAnalysis', () => {
     expect(result.investedAmount).toBe('1,000.00 PLN');
     expect(result.spendingAmount).toBe('500.00 PLN');
   });
+
+  it('groups deterministic categoryKey expenses and still lets AI categorize the rest', () => {
+    const result = reconcileExpenseAnalysis(
+      [
+        {
+          id: 1,
+          name: 'ETF VWCE',
+          amountCents: 100_000,
+          categoryKey: 'Investments',
+        },
+        { id: 2, name: 'Biedronka', amountCents: 5000 },
+      ],
+      // id 1 is deterministic and is never actually sent to AI; even if a
+      // misbehaving response tries to claim it, the deterministic assignment wins.
+      [{ name: 'Groceries', itemIds: [1, 2] }],
+      200_000,
+      SummaryEmailLanguage.EN,
+      'PLN',
+    );
+
+    expect(result.categories).toEqual([
+      {
+        name: 'Investments',
+        total: '1,000.00 PLN',
+        items: [{ name: 'ETF VWCE', amount: '1,000.00 PLN' }],
+      },
+      {
+        name: 'Groceries',
+        total: '50.00 PLN',
+        items: [{ name: 'Biedronka', amount: '50.00 PLN' }],
+      },
+    ]);
+    expect(result.investedCents).toBe(100_000);
+    expect(result.totalExpensesCents).toBe(105_000);
+  });
+
+  it('merges deterministic Other-prefixed lines with leftover unassigned lines', () => {
+    const result = reconcileExpenseAnalysis(
+      [
+        { id: 1, name: 'Misc fee', amountCents: 1000, categoryKey: 'Other' },
+        { id: 2, name: 'Unlabeled', amountCents: 2000 },
+      ],
+      [],
+      100_000,
+      SummaryEmailLanguage.EN,
+      'PLN',
+    );
+
+    expect(result.categories).toEqual([
+      {
+        name: 'Other expenses',
+        total: '30.00 PLN',
+        items: [
+          { name: 'Misc fee', amount: '10.00 PLN' },
+          { name: 'Unlabeled', amount: '20.00 PLN' },
+        ],
+      },
+    ]);
+  });
 });

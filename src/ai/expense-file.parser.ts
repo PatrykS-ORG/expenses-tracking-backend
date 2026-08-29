@@ -128,15 +128,23 @@ function mergeKey(name: string, categoryKey?: SummaryCategoryKey): string {
 }
 
 /**
- * Parses free-form expense file text into merged expense rows.
- * Optional `CategoryKey |` prefixes are stripped from names for cron/AI
- * compatibility; duplicate names (case/whitespace-insensitive) are summed.
+ * Parses free-form expense file text into merged canonical expense rows.
+ * Optional `CategoryKey |` prefixes are preserved on each row (not stripped)
+ * so cron/manual analysis can skip AI re-categorization for lines the user
+ * already assigned. Duplicate names are only merged when they share the same
+ * category (or are both unassigned) — the same name in different categories
+ * stays separate, matching `parseCategorizedExpenseFile`.
  * Salary is not parsed from the file — it comes from the user profile.
  */
 export function parseExpenseFile(rawContent: string): ParsedExpenseFile {
   const merged = new Map<
     string,
-    { name: string; amountCents: number; order: number }
+    {
+      name: string;
+      amountCents: number;
+      categoryKey?: SummaryCategoryKey;
+      order: number;
+    }
   >();
   let order = 0;
 
@@ -146,7 +154,7 @@ export function parseExpenseFile(rawContent: string): ParsedExpenseFile {
       continue;
     }
 
-    const key = normalizeExpenseName(parsed.name);
+    const key = mergeKey(parsed.name, parsed.categoryKey);
     const existing = merged.get(key);
     if (existing) {
       existing.amountCents += parsed.amountCents;
@@ -156,6 +164,7 @@ export function parseExpenseFile(rawContent: string): ParsedExpenseFile {
     merged.set(key, {
       name: parsed.name,
       amountCents: parsed.amountCents,
+      categoryKey: parsed.categoryKey,
       order: order++,
     });
   }
@@ -166,6 +175,7 @@ export function parseExpenseFile(rawContent: string): ParsedExpenseFile {
       id: index + 1,
       name: entry.name,
       amountCents: entry.amountCents,
+      ...(entry.categoryKey ? { categoryKey: entry.categoryKey } : {}),
     }));
 
   return { expenses };

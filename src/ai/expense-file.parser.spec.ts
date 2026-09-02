@@ -79,7 +79,7 @@ Groceries 100zł
     ]);
   });
 
-  it('strips category prefixes for cron-compatible name merging', () => {
+  it('preserves category prefixes so AI can skip already-assigned lines', () => {
     const parsed = parseExpenseFile(`
 Groceries | Biedronka 45.20 PLN
 Transport | Orlen 120.00
@@ -87,8 +87,22 @@ Biedronka 10.00
 `);
 
     expect(parsed.expenses).toEqual([
-      { id: 1, name: 'Biedronka', amountCents: 5520 },
-      { id: 2, name: 'Orlen', amountCents: 12_000 },
+      { id: 1, name: 'Biedronka', amountCents: 4520, categoryKey: 'Groceries' },
+      { id: 2, name: 'Orlen', amountCents: 12_000, categoryKey: 'Transport' },
+      { id: 3, name: 'Biedronka', amountCents: 1000 },
+    ]);
+  });
+
+  it('merges same name within the same category but keeps different categories separate', () => {
+    const parsed = parseExpenseFile(`
+Groceries | Biedronka 10.00
+Groceries | biedronka 5.00
+DiningOut | Biedronka 20.00
+`);
+
+    expect(parsed.expenses).toEqual([
+      { id: 1, name: 'Biedronka', amountCents: 1500, categoryKey: 'Groceries' },
+      { id: 2, name: 'Biedronka', amountCents: 2000, categoryKey: 'DiningOut' },
     ]);
   });
 });

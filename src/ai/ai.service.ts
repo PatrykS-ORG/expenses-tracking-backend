@@ -44,9 +44,12 @@ The output MUST be only raw HTML code starting with <!DOCTYPE html>.`;
 const EXPENSE_ANALYSIS_PROMPT = `You are a financial assistant that categorizes monthly expenses for a personalized email report.
 
 The application has ALREADY parsed, merged duplicate names, and calculated every amount.
+Some expenses were ALREADY categorized by the user before this request and are excluded
+from the canonical list below — their category totals are given to you only as context.
 Your job is ONLY to:
-1) Assign each canonical expense ID to a parent category
-2) Write a short analytical savingsMessage
+1) Assign each canonical expense ID (the ones still needing a category) to a parent category
+2) Write a short analytical savingsMessage that accounts for ALL spending, including the
+   already-categorized totals given as context
 3) Suggest a display userName when possible
 
 Return strictly valid JSON with these keys:
@@ -68,6 +71,10 @@ Categorization rules (critical):
 4) Do not invent expenses that are not in the canonical list.
 5) Each category.itemIds must contain at least 1 ID.
 6) Use the English category names exactly as listed above (not translated labels).
+7) Never invent IDs for the already-categorized totals given as context — those are not
+   part of the canonical list and must not appear in any itemIds array.
+8) If the canonical list is empty (every expense was already categorized by the user),
+   return "categories": [] — do not fabricate entries.
 
 savingsMessage rules (critical — do NOT just restate totals):
 1) Name the category that consumed the largest share of salary, with its percentage (use the provided totals). Ignore the Investments category when naming the largest consumption share — investing is saving, not spending.
@@ -363,22 +370,35 @@ export class AiService {
       );
     }
 
+    // Lines with an in-file `CategoryKey |` prefix were already categorized by
+    // the user and are never re-categorized by AI — only the rest go to the model.
+    const preCategorized = parsedFile.expenses.filter(
+      (expense) => expense.categoryKey,
+    );
+    const toCategorize = parsedFile.expenses.filter(
+      (expense) => !expense.categoryKey,
+    );
+
     const openai = this.createClient();
     const model = 'deepseek-chat';
     const languageInstructions =
       getSummaryLanguageInstructions(resolvedLanguage);
     const totalsHint = this.buildTotalsHint(
       parsedFile.expenses,
+      preCategorized,
       salaryCents,
       resolvedLanguage,
       currency,
     );
-    const canonicalList = parsedFile.expenses
-      .map(
-        (expense) =>
-          `${expense.id}. ${expense.name} — ${formatMoneyAmount(expense.amountCents, resolvedLanguage, currency)}`,
-      )
-      .join('\n');
+    const canonicalList =
+      toCategorize.length > 0
+        ? toCategorize
+            .map(
+              (expense) =>
+                `${expense.id}. ${expense.name} — ${formatMoneyAmount(expense.amountCents, resolvedLanguage, currency)}`,
+            )
+            .join('\n')
+        : '(none — every expense already has a user-assigned category)';
 
     let usage: TokenUsage = {
       promptTokens: 0,
@@ -810,6 +830,7 @@ ${canonicalList}`,
 
   private buildTotalsHint(
     expenses: CanonicalExpense[],
+    preCategorized: CanonicalExpense[],
     salaryCents: number,
     language: SummaryEmailLanguage,
     currency: string,
@@ -823,12 +844,36 @@ ${canonicalList}`,
       (a, b) => b.amountCents - a.amountCents,
     )[0];
 
+    const preCategorizedTotals = new Map<string, number>();
+    for (const expense of preCategorized) {
+      const key = expense.categoryKey;
+      if (!key) {
+        continue;
+      }
+      preCategorizedTotals.set(
+        key,
+        (preCategorizedTotals.get(key) ?? 0) + expense.amountCents,
+      );
+    }
+    const preCategorizedHint =
+      preCategorizedTotals.size > 0
+        ? `- Already categorized by the user (context only — do not re-assign, do not include in itemIds): ${[
+            ...preCategorizedTotals.entries(),
+          ]
+            .map(
+              ([key, cents]) =>
+                `${key} ${formatMoneyAmount(cents, language, currency)}`,
+            )
+            .join(', ')}`
+        : '';
+
     return [
       `Computed totals (authoritative — use these exact figures in savingsMessage):`,
       `- salaryAmount: ${formatMoneyAmount(salaryCents, language, currency)}`,
       `- totalExpenses (all outflows, including Investments): ${formatMoneyAmount(totalExpensesCents, language, currency)}`,
       `- savingsAmount (salary - totalExpenses, leftover cash / free savings, may be negative): ${formatMoneyAmount(savingsCents, language, currency)}`,
       `- Treat Investments as saving, not consumption spending.`,
+      preCategorizedHint,
       largest
         ? `- largest single expense: ${largest.name} — ${formatMoneyAmount(largest.amountCents, language, currency)}`
         : '',
@@ -885,8 +930,10 @@ ${canonicalList}`,
         return null;
       }
 
+      // An empty array is valid here — it means every expense already had a
+      // user-assigned category and nothing was left for the AI to categorize.
       const categories = this.normalizeCategoryAssignments(parsed.categories);
-      if (!categories || categories.length === 0) {
+      if (!categories) {
         return null;
       }
 
@@ -903,7 +950,9 @@ ${canonicalList}`,
   private normalizeCategoryAssignments(
     value: unknown,
   ): AiCategoryAssignment[] | null {
-    if (!Array.isArray(value) || value.length === 0) {
+    // An empty array is a legitimate shape (nothing left to categorize);
+    // only non-array values are treated as malformed.
+    if (!Array.isArray(value)) {
       return null;
     }
 

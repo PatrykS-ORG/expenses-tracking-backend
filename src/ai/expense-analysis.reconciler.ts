@@ -6,11 +6,12 @@ import {
   isSavingsLikeCategory,
   normalizeCategoryName,
 } from '../summary/summary-category.constants';
+import {
+  AiCategoryAssignment,
+  splitExpensesByAssignment,
+} from './expense-category-assignment';
 
-export interface AiCategoryAssignment {
-  name: string;
-  itemIds: number[];
-}
+export type { AiCategoryAssignment };
 
 export interface ReconciledExpenseAnalysis {
   salaryAmount: string;
@@ -34,7 +35,9 @@ function getOtherCategoryName(language: SummaryEmailLanguage): string {
 
 /**
  * Builds category totals from canonical expenses + AI itemId assignments.
- * Unknown IDs are ignored; unassigned expenses land in "Other".
+ * Expenses with a deterministic `categoryKey` (from an in-file `CategoryKey |`
+ * prefix) are never re-assigned by AI — they are grouped directly. Unknown AI
+ * IDs are ignored; everything left unassigned lands in "Other".
  */
 export function reconcileExpenseAnalysis(
   expenses: CanonicalExpense[],
@@ -43,60 +46,39 @@ export function reconcileExpenseAnalysis(
   language: SummaryEmailLanguage,
   currency: string,
 ): ReconciledExpenseAnalysis {
-  const byId = new Map(expenses.map((expense) => [expense.id, expense]));
-  const assignedIds = new Set<number>();
-  const categories: ExpenseCategory[] = [];
-  let investedCents = 0;
+  const { deterministic, aiAssigned, unassigned } = splitExpensesByAssignment(
+    expenses,
+    aiCategories,
+  );
 
-  for (const aiCategory of aiCategories) {
-    const categoryName = aiCategory.name?.trim();
-    if (!categoryName || !Array.isArray(aiCategory.itemIds)) {
-      continue;
-    }
-
-    const items: ExpenseCategory['items'] = [];
-    let totalCents = 0;
-
-    for (const itemId of aiCategory.itemIds) {
-      if (typeof itemId !== 'number' || !Number.isInteger(itemId)) {
-        continue;
-      }
-      if (assignedIds.has(itemId)) {
-        continue;
-      }
-
-      const expense = byId.get(itemId);
-      if (!expense) {
-        continue;
-      }
-
-      assignedIds.add(itemId);
-      totalCents += expense.amountCents;
-      items.push({
-        name: expense.name,
-        amount: formatMoneyAmount(expense.amountCents, language, currency),
-      });
-    }
-
+  const grouped = new Map<string, CanonicalExpense[]>();
+  const addToCategory = (name: string, items: CanonicalExpense[]): void => {
     if (items.length === 0) {
-      continue;
+      return;
     }
+    const bucket = grouped.get(name) ?? [];
+    bucket.push(...items);
+    grouped.set(name, bucket);
+  };
 
-    if (isSavingsLikeCategory(normalizeCategoryName(categoryName))) {
-      investedCents += totalCents;
-    }
-
-    categories.push({
-      name: categoryName,
-      total: formatMoneyAmount(totalCents, language, currency),
-      items,
-    });
+  for (const [categoryKey, items] of deterministic) {
+    const displayName =
+      categoryKey === 'Other' ? getOtherCategoryName(language) : categoryKey;
+    addToCategory(displayName, items);
   }
 
-  const unassigned = expenses.filter((expense) => !assignedIds.has(expense.id));
-  if (unassigned.length > 0) {
+  for (const group of aiAssigned) {
+    addToCategory(group.name, group.expenses);
+  }
+
+  addToCategory(getOtherCategoryName(language), unassigned);
+
+  let investedCents = 0;
+  const categories: ExpenseCategory[] = [];
+
+  for (const [name, items] of grouped) {
     let totalCents = 0;
-    const items = unassigned.map((expense) => {
+    const categoryItems = items.map((expense) => {
       totalCents += expense.amountCents;
       return {
         name: expense.name,
@@ -104,10 +86,14 @@ export function reconcileExpenseAnalysis(
       };
     });
 
+    if (isSavingsLikeCategory(normalizeCategoryName(name))) {
+      investedCents += totalCents;
+    }
+
     categories.push({
-      name: getOtherCategoryName(language),
+      name,
       total: formatMoneyAmount(totalCents, language, currency),
-      items,
+      items: categoryItems,
     });
   }
 

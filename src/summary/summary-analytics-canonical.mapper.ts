@@ -1,5 +1,8 @@
 import { CanonicalExpense } from '../ai/expense-file.parser';
-import { AiCategoryAssignment } from '../ai/expense-analysis.reconciler';
+import {
+  AiCategoryAssignment,
+  splitExpensesByAssignment,
+} from '../ai/expense-category-assignment';
 import {
   CANONICAL_CATEGORY_KEYS,
   StoredSummaryCategory,
@@ -7,6 +10,8 @@ import {
   SummaryCategoryKey,
   normalizeCategoryName,
 } from './summary-category.constants';
+
+export type { AiCategoryAssignment };
 
 function mergeCategoryItems(
   target: Map<SummaryCategoryKey, StoredSummaryCategory>,
@@ -30,53 +35,42 @@ function mergeCategoryItems(
   );
 }
 
+function toStoredItems(
+  expenses: CanonicalExpense[],
+): StoredSummaryCategoryItem[] {
+  return expenses.map((expense) => ({
+    name: expense.name,
+    amountCents: expense.amountCents,
+  }));
+}
+
+/**
+ * Builds the canonical per-category snapshot used for stored `SummaryAnalytics`.
+ * Deterministic `categoryKey` expenses (in-file prefixes) are grouped directly
+ * under their canonical key; the rest follow the AI's itemId assignment.
+ */
 export function buildCanonicalCategoriesFromExpenses(
   expenses: CanonicalExpense[],
   aiCategories: AiCategoryAssignment[],
 ): StoredSummaryCategory[] {
-  const byId = new Map(expenses.map((expense) => [expense.id, expense]));
-  const assignedIds = new Set<number>();
+  const { deterministic, aiAssigned, unassigned } = splitExpensesByAssignment(
+    expenses,
+    aiCategories,
+  );
+
   const grouped = new Map<SummaryCategoryKey, StoredSummaryCategory>();
 
-  for (const aiCategory of aiCategories) {
-    const canonicalKey = normalizeCategoryName(aiCategory.name ?? '');
-    const items: StoredSummaryCategoryItem[] = [];
-
-    for (const itemId of aiCategory.itemIds) {
-      if (typeof itemId !== 'number' || !Number.isInteger(itemId)) {
-        continue;
-      }
-      if (assignedIds.has(itemId)) {
-        continue;
-      }
-
-      const expense = byId.get(itemId);
-      if (!expense) {
-        continue;
-      }
-
-      assignedIds.add(itemId);
-      items.push({
-        name: expense.name,
-        amountCents: expense.amountCents,
-      });
-    }
-
-    if (items.length > 0) {
-      mergeCategoryItems(grouped, canonicalKey, items);
-    }
+  for (const [categoryKey, items] of deterministic) {
+    mergeCategoryItems(grouped, categoryKey, toStoredItems(items));
   }
 
-  const unassigned = expenses.filter((expense) => !assignedIds.has(expense.id));
+  for (const group of aiAssigned) {
+    const canonicalKey = normalizeCategoryName(group.name ?? '');
+    mergeCategoryItems(grouped, canonicalKey, toStoredItems(group.expenses));
+  }
+
   if (unassigned.length > 0) {
-    mergeCategoryItems(
-      grouped,
-      'Other',
-      unassigned.map((expense) => ({
-        name: expense.name,
-        amountCents: expense.amountCents,
-      })),
-    );
+    mergeCategoryItems(grouped, 'Other', toStoredItems(unassigned));
   }
 
   return CANONICAL_CATEGORY_KEYS.filter((key) => grouped.has(key)).map(

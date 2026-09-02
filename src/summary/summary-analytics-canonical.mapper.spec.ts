@@ -63,4 +63,33 @@ describe('buildCanonicalCategoriesFromExpenses', () => {
       'Transport',
     ]);
   });
+
+  it('groups deterministic categoryKey expenses without sending them to AI', () => {
+    const withPrefix: CanonicalExpense[] = [
+      {
+        id: 1,
+        name: 'ETF VWCE',
+        amountCents: 100_000,
+        categoryKey: 'Investments',
+      },
+      { id: 2, name: 'Paliwo', amountCents: 36600 },
+    ];
+
+    const result = buildCanonicalCategoriesFromExpenses(withPrefix, [
+      { name: 'Transport', itemIds: [2] },
+    ]);
+
+    expect(result).toEqual([
+      {
+        name: 'Transport',
+        totalCents: 36600,
+        items: [{ name: 'Paliwo', amountCents: 36600 }],
+      },
+      {
+        name: 'Investments',
+        totalCents: 100_000,
+        items: [{ name: 'ETF VWCE', amountCents: 100_000 }],
+      },
+    ]);
+  });
 });

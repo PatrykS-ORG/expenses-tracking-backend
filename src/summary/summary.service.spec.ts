@@ -166,7 +166,7 @@ describe('SummaryService', () => {
       300_000,
       'EN',
       'EUR',
-      '2026-07',
+      '2026-08',
       AiUsageTrigger.MANUAL,
     );
     expect(emailServiceMock.sendEmail).toHaveBeenCalledWith(

@@ -2,6 +2,12 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+input AddSavingsGoalContributionInput {
+  amountCents: Int!
+  note: String
+  occurredOn: DateTime!
+}
+
 enum AiActionType {
   EXPENSE_SUMMARY
   RECEIPT_SCAN
@@ -44,6 +50,18 @@ input CreateManualSummaryInput {
   period: String!
   salaryAmount: String!
   savingsMessage: String
+}
+
+input CreateSavingsGoalEventInput {
+  currency: String
+  name: String!
+  targetDate: DateTime
+}
+
+input CreateSavingsGoalItemInput {
+  name: String!
+  targetAmountCents: Int!
+  targetDate: DateTime
 }
 
 input CreateTemplateInput {
@@ -166,10 +184,16 @@ input MonthlyBudgetCategoryInput {
 }
 
 type Mutation {
+  addSavingsGoalContribution(input: AddSavingsGoalContributionInput!, itemId: String!): SavingsGoalEvent!
   approveReceiptExpenses(input: ApproveReceiptExpensesInput!): Boolean!
   createManualSummary(input: CreateManualSummaryInput!): SummaryAnalyticsModel!
+  createSavingsGoalEvent(input: CreateSavingsGoalEventInput!): SavingsGoalEvent!
+  createSavingsGoalItem(eventId: String!, input: CreateSavingsGoalItemInput!): SavingsGoalEvent!
   createTemplate(input: CreateTemplateInput!): Template!
   deleteMyAccount: Boolean!
+  deleteSavingsGoalContribution(id: String!): SavingsGoalEvent!
+  deleteSavingsGoalEvent(id: String!): Boolean!
+  deleteSavingsGoalItem(id: String!): SavingsGoalEvent!
   deleteTemplate(templateId: String!): Boolean!
   generateTemplate(input: GenerateTemplateInput!): Template!
   overwriteCurrentExpenseFile(input: ExpenseFileUploadInput!): UploadedExpenseFile!
@@ -183,6 +207,8 @@ type Mutation {
   updateDataSource(input: UpdateDataSourceInput!): Boolean!
   updateManualSummary(input: UpdateManualSummaryInput!): SummaryAnalyticsModel!
   updateSalary(salaryAmount: String!): Int!
+  updateSavingsGoalEvent(id: String!, input: UpdateSavingsGoalEventInput!): SavingsGoalEvent!
+  updateSavingsGoalItem(id: String!, input: UpdateSavingsGoalItemInput!): SavingsGoalEvent!
   updateSummarySchedule(input: UpdateSummaryScheduleInput!): SummarySchedule!
   updateTemplate(input: UpdateTemplateInput!): Template!
   uploadExpenseFile(input: ExpenseFileUploadInput!): UploadedExpenseFile!
@@ -207,6 +233,7 @@ type Query {
   myAiUsageSummary: AiUsageSummary!
   myMonthlyBudget: MonthlyBudget
   myProfile: Profile!
+  mySavingsGoals: [SavingsGoalEvent!]!
   mySummaries: [SummaryAnalyticsModel!]!
   mySummary(month: String!): SummaryAnalyticsModel
   mySummarySchedule: SummarySchedule!
@@ -228,6 +255,42 @@ input SaveMonthlyBudgetInput {
   categories: [MonthlyBudgetCategoryInput!]!
   currency: String!
   extraExpense: ExtraExpenseInput
+}
+
+type SavingsGoalContribution {
+  amountCents: Int!
+  createdAt: DateTime!
+  id: String!
+  note: String
+  occurredOn: DateTime!
+}
+
+type SavingsGoalEvent {
+  createdAt: DateTime!
+  currency: String!
+  id: String!
+  items: [SavingsGoalItem!]!
+  name: String!
+  progressPercent: Int!
+  targetDate: DateTime
+  totalSavedCents: Int!
+  totalTargetCents: Int!
+  updatedAt: DateTime!
+}
+
+type SavingsGoalItem {
+  contributions: [SavingsGoalContribution!]!
+  createdAt: DateTime!
+  id: String!
+  monthlySuggestionCents: Int
+  name: String!
+  progressPercent: Int!
+  remainingCents: Int!
+  savedCents: Int!
+  sortOrder: Int!
+  targetAmountCents: Int!
+  targetDate: DateTime
+  updatedAt: DateTime!
 }
 
 input ScanReceiptInput {
@@ -317,6 +380,18 @@ input UpdateManualSummaryInput {
   period: String!
   salaryAmount: String!
   savingsMessage: String
+}
+
+input UpdateSavingsGoalEventInput {
+  currency: String
+  name: String
+  targetDate: DateTime
+}
+
+input UpdateSavingsGoalItemInput {
+  name: String
+  targetAmountCents: Int
+  targetDate: DateTime
 }
 
 input UpdateSummaryScheduleInput {

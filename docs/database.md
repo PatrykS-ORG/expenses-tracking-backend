@@ -38,6 +38,7 @@ Relations:
 - `summaryAnalytics` — persisted monthly expense analytics snapshots
 - `aiUsageLogs` — AI spend audit entries
 - `monthlyBudget` — optional reusable monthly category budget template
+- `savingsGoalEvents` — long-term savings goal events (each with sub-goals and contribution logs)
 
 ### `SummaryLog`
 
@@ -126,6 +127,58 @@ Omitted keys are treated as `0` by the client. Amounts must be non-negative inte
 ```
 
 Only categories with a non-zero cut need entries. `cutPercent` is an integer 1–100. Saving the budget with `extraExpense: null` clears the stored extra expense.
+
+### `SavingsGoalEvent`
+
+Named long-term savings event (e.g. a wedding). A user may own many events.
+
+| Field         | Type        | Description                         |
+| ------------- | ----------- | ----------------------------------- |
+| `id`          | `String` PK | Event id                            |
+| `user_id`     | `String` FK | Owner id                            |
+| `name`        | `String`    | Display name                        |
+| `currency`    | `String`    | Same closed list as report currency |
+| `target_date` | `DateTime?` | Optional event deadline             |
+| `created_at`  | `DateTime`  | First insert timestamp              |
+| `updated_at`  | `DateTime`  | Last update timestamp               |
+
+Index: `user_id`. Cascade-deletes items (and their contributions) with the event.
+
+Derived GraphQL fields (not stored): `totalTargetCents`, `totalSavedCents`, `progressPercent`.
+
+### `SavingsGoalItem`
+
+Sub-goal under an event (e.g. wedding suit), with a target amount and optional own deadline.
+
+| Field                 | Type        | Description                    |
+| --------------------- | ----------- | ------------------------------ |
+| `id`                  | `String` PK | Item id                        |
+| `event_id`            | `String` FK | Parent event id                |
+| `name`                | `String`    | Display name                   |
+| `target_amount_cents` | `Int`       | Target amount in minor units   |
+| `target_date`         | `DateTime?` | Optional sub-goal deadline     |
+| `sort_order`          | `Int`       | Display order within the event |
+| `created_at`          | `DateTime`  | First insert timestamp         |
+| `updated_at`          | `DateTime`  | Last update timestamp          |
+
+Index: `event_id`. Cascade-deletes contributions with the item.
+
+Derived GraphQL fields (not stored): `savedCents` (sum of contributions), `remainingCents`, `progressPercent`, `monthlySuggestionCents` (`remaining / months until target_date` when a future date exists).
+
+### `SavingsGoalContribution`
+
+Dated deposit toward a sub-goal. Amounts are positive in v1.
+
+| Field          | Type        | Description                    |
+| -------------- | ----------- | ------------------------------ |
+| `id`           | `String` PK | Contribution id                |
+| `item_id`      | `String` FK | Parent item id                 |
+| `amount_cents` | `Int`       | Amount in minor units          |
+| `occurred_on`  | `DateTime`  | Date the contribution happened |
+| `note`         | `String?`   | Optional note                  |
+| `created_at`   | `DateTime`  | Insert timestamp               |
+
+Index: `item_id`.
 
 ### `Template`
 
@@ -239,6 +292,9 @@ erDiagram
   User ||--o{ SummaryAnalytics : analytics
   User ||--o{ AiUsageLog : aiUsage
   User ||--o| MonthlyBudget : monthlyBudget
+  User ||--o{ SavingsGoalEvent : savingsGoalEvents
+  SavingsGoalEvent ||--o{ SavingsGoalItem : items
+  SavingsGoalItem ||--o{ SavingsGoalContribution : contributions
   User {
     string id PK
     string email UK
@@ -293,6 +349,33 @@ erDiagram
     datetime created_at
     datetime updated_at
   }
+  SavingsGoalEvent {
+    string id PK
+    string user_id FK
+    string name
+    string currency
+    datetime target_date
+    datetime created_at
+    datetime updated_at
+  }
+  SavingsGoalItem {
+    string id PK
+    string event_id FK
+    string name
+    int target_amount_cents
+    datetime target_date
+    int sort_order
+    datetime created_at
+    datetime updated_at
+  }
+  SavingsGoalContribution {
+    string id PK
+    string item_id FK
+    int amount_cents
+    datetime occurred_on
+    string note
+    datetime created_at
+  }
   AiUsageLog {
     string id PK
     string user_id FK
@@ -323,6 +406,7 @@ erDiagram
 | `20260805194853_add_summary_analytics`               | Adds `SummaryAnalytics` table and `SummaryAnalyticsSource` enum                                           |
 | `20260819213000_add_monthly_budget`                  | Adds `MonthlyBudget` table (one reusable category budget template per user)                               |
 | `20260820200000_add_extra_expense_to_monthly_budget` | Adds nullable `extra_expense` JSON on `MonthlyBudget` (one-off expense + category cut percents)           |
+| `20260902190000_add_savings_goals`                   | Adds `SavingsGoalEvent`, `SavingsGoalItem`, and `SavingsGoalContribution` (long-term savings goals)       |
 
 ## Business rules
 
@@ -341,7 +425,7 @@ erDiagram
 - Category keys in analytics JSON and `MonthlyBudget.categories` must belong to the closed vocabulary listed above.
 - Report currency is restricted by the API to `PLN`, `EUR`, `USD`, `GBP`, `CHF`, `CZK`, or `UAH`; it controls AI output formatting and does not perform exchange-rate conversion.
 - AI spend is capped monthly per user (`User.ai_credit_limit`). Credits = `ceil(total_tokens / AI_TOKENS_PER_CREDIT)`. Manual AI actions fail when the budget is exhausted; cron summaries skip those users.
-- `deleteMyAccount` removes the Supabase Auth identity, local profile (including cascaded templates, summary logs, summary analytics, monthly budget, and AI usage logs), and best-effort removes the uploaded expense file.
+- `deleteMyAccount` removes the Supabase Auth identity, local profile (including cascaded templates, summary logs, summary analytics, monthly budget, savings goal events/items/contributions, and AI usage logs), and best-effort removes the uploaded expense file.
 
 See [cron-summaries.md](./cron-summaries.md) for batch processing details.
 

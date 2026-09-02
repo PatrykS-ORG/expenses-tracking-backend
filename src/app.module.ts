@@ -16,6 +16,7 @@ import { ReceiptsModule } from './receipts/receipts.module';
 import { CronModule } from './cron/cron.module';
 import { SummaryModule } from './summary/summary.module';
 import { BudgetModule } from './budget/budget.module';
+import { SavingsGoalsModule } from './savings-goals/savings-goals.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { BudgetModule } from './budget/budget.module';
     ReceiptsModule,
     SummaryModule,
     BudgetModule,
+    SavingsGoalsModule,
     CronModule,
   ],
   providers: [AppService, AppResolver],

@@ -89,6 +89,8 @@ Current critical env groups:
 - Email: `BREVO_API_KEY`, `MAIL_SENDER`, `MAIL_SENDER_NAME`, `BREVO_BASE_URL`
 - AI: `DEEPSEEK_API_KEY`, `DEEPSEEK_VISION_MODEL`, `RECEIPT_OCR_LANG`, `AI_TOKENS_PER_CREDIT`, `AI_MONTHLY_CREDIT_LIMIT`
 - Nextcloud: `NEXTCLOUD_WEBDAV_URL`, `NEXTCLOUD_USERNAME`, `NEXTCLOUD_PASSWORD`
+- Cron webhook: `CRON_SECRET`
+- Dev/test month-close clock: `TEST_NOW_ISO` (ignored when `NODE_ENV=production`)
 
 ## Testing
 

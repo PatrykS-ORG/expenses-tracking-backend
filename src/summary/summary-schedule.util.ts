@@ -154,6 +154,20 @@ export function getCurrentCalendarPeriod(
   return `${parts.year}-${String(parts.month).padStart(2, '0')}`;
 }
 
+export function previousCalendarPeriod(period: string): string {
+  const [yearStr, monthStr] = period.split('-');
+  let year = Number(yearStr);
+  let month = Number(monthStr) - 1;
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return period;
+  }
+  if (month === 0) {
+    month = 12;
+    year -= 1;
+  }
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
 const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 /** Earliest YYYY-MM accepted for analytics view / create / update. */

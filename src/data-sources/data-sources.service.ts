@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  forwardRef,
+} from '@nestjs/common';
 import { decodeUploadedFile } from '../common/decode-uploaded-file';
 import { AiService } from '../ai/ai.service';
 import { centsToAmount } from '../ai/expense-amount.formatter';
@@ -9,6 +14,7 @@ import {
   serializeCategorizedExpenseFile,
 } from '../ai/expense-file.parser';
 import { AiUsageTrigger } from '../generated/prisma/client';
+import { MonthCloseService } from '../month-close/month-close.service';
 import { parseMoneyToCents } from '../summary/summary-manual-input.parser';
 import {
   CANONICAL_CATEGORY_KEYS,
@@ -37,6 +43,8 @@ export class DataSourcesService {
     private readonly storageService: SupabaseStorageService,
     private readonly templatesService: TemplatesService,
     private readonly aiService: AiService,
+    @Inject(forwardRef(() => MonthCloseService))
+    private readonly monthCloseService: MonthCloseService,
   ) {}
 
   async uploadExpenseFile(
@@ -44,6 +52,7 @@ export class DataSourcesService {
     userEmail: string | undefined,
     input: ExpenseFileUploadInput,
   ): Promise<UploadedExpenseFile> {
+    await this.monthCloseService.assertMonthWritable(userId, userEmail);
     const file = decodeUploadedFile(input);
     const uploadedFileConfig = await this.storageService.uploadExpenseFile(
       userId,
@@ -90,6 +99,7 @@ export class DataSourcesService {
     userEmail: string | undefined,
     input: SaveCurrentMonthExpensesInput,
   ): Promise<CurrentMonthExpenses> {
+    await this.monthCloseService.assertMonthWritable(userId, userEmail);
     const categorized = this.parseSaveInput(input);
     const content = serializeCategorizedExpenseFile(categorized);
     await this.writeExpenseFileContent(userId, userEmail, content);
@@ -163,6 +173,7 @@ export class DataSourcesService {
     userEmail: string | undefined,
     input: ExpenseFileUploadInput,
   ): Promise<UploadedExpenseFile> {
+    await this.monthCloseService.assertMonthWritable(userId, userEmail);
     const file = decodeUploadedFile(input);
     const existingConfig =
       await this.templatesService.tryGetFileUploadSourceConfig(
@@ -200,6 +211,14 @@ export class DataSourcesService {
     );
 
     return this.toUploadedExpenseFile(updatedConfig);
+  }
+
+  async replaceExpenseFileContent(
+    userId: string,
+    userEmail: string | undefined,
+    content: string,
+  ): Promise<void> {
+    await this.writeExpenseFileContent(userId, userEmail, content);
   }
 
   async readExpenseFileContentOrEmpty(

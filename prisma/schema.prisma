@@ -61,6 +61,7 @@ model User {
   aiUsageLogs           AiUsageLog[]
   monthlyBudget         MonthlyBudget?
   savingsGoalEvents     SavingsGoalEvent[]
+  monthCloses           MonthClose[]
 
   // Relacja do aktywnego szablonu
   activeTemplate Template? @relation("ActiveTemplate", fields: [active_template_id], references: [id])
@@ -153,6 +154,21 @@ model SavingsGoalItem {
   contributions SavingsGoalContribution[]
 
   @@index([event_id])
+}
+
+model MonthClose {
+  id                  String   @id @default(uuid())
+  user_id             String
+  period              String
+  free_savings_cents  Int
+  allocated_cents     Int
+  currency            String
+  closed_at           DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, period])
+  @@index([user_id])
 }
 
 model SavingsGoalContribution {

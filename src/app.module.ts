@@ -17,6 +17,7 @@ import { CronModule } from './cron/cron.module';
 import { SummaryModule } from './summary/summary.module';
 import { BudgetModule } from './budget/budget.module';
 import { SavingsGoalsModule } from './savings-goals/savings-goals.module';
+import { MonthCloseModule } from './month-close/month-close.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { SavingsGoalsModule } from './savings-goals/savings-goals.module';
     SummaryModule,
     BudgetModule,
     SavingsGoalsModule,
+    MonthCloseModule,
     CronModule,
   ],
   providers: [AppService, AppResolver],

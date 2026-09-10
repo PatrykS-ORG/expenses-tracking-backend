@@ -34,6 +34,7 @@ flowchart LR
     SummaryMod[SummaryModule]
     BudgetMod[BudgetModule]
     SavingsGoalsMod[SavingsGoalsModule]
+    MonthCloseMod[MonthCloseModule]
     CronMod[CronModule]
     PrismaSvc[PrismaService]
   end
@@ -77,6 +78,8 @@ flowchart LR
   SummaryMod --> DataSourcesMod
   BudgetMod --> PrismaSvc
   SavingsGoalsMod --> PrismaSvc
+  MonthCloseMod --> PrismaSvc
+  MonthCloseMod --> DataSourcesMod
   CronMod --> SummaryMod
   PrismaSvc --> Postgres
 ```
@@ -98,6 +101,7 @@ flowchart LR
 - `SummaryModule`
 - `BudgetModule`
 - `SavingsGoalsModule`
+- `MonthCloseModule`
 - `CronModule`
 
 ### Implemented modules
@@ -117,6 +121,7 @@ flowchart LR
 | `SummaryModule`      | Summary schedule + monthly analytics GraphQL + batch summary pipeline        |
 | `BudgetModule`       | Reusable monthly category budget template GraphQL                            |
 | `SavingsGoalsModule` | Long-term savings events, sub-goals, and contribution-log GraphQL            |
+| `MonthCloseModule`   | Month-close status, leftover allocation mutation, and new-month write guard  |
 | `CronModule`         | Secured REST webhook for hourly batch processing                             |
 
 ### REST endpoints

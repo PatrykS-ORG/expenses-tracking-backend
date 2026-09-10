@@ -2,6 +2,7 @@ import {
   computeNextSummaryAt,
   getCurrentCalendarPeriod,
   getSummaryPeriod,
+  previousCalendarPeriod,
   getZonedDateParts,
   isCreatableSummaryPeriod,
   isEndedSummaryPeriod,
@@ -51,5 +52,10 @@ describe('summary-schedule.util', () => {
     // Previous month is creatable once the new month has started.
     expect(isCreatableSummaryPeriod('2026-03', timezone, at)).toBe(true);
     expect(isCreatableSummaryPeriod('2026-04', timezone, at)).toBe(false);
+  });
+
+  it('shifts a YYYY-MM period back one calendar month', () => {
+    expect(previousCalendarPeriod('2026-10')).toBe('2026-09');
+    expect(previousCalendarPeriod('2026-01')).toBe('2025-12');
   });
 });

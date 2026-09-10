@@ -39,6 +39,7 @@ Relations:
 - `aiUsageLogs` — AI spend audit entries
 - `monthlyBudget` — optional reusable monthly category budget template
 - `savingsGoalEvents` — long-term savings goal events (each with sub-goals and contribution logs)
+- `monthCloses` — one row per closed leftover-allocation period
 
 ### `SummaryLog`
 
@@ -180,6 +181,22 @@ Dated deposit toward a sub-goal. Amounts are positive in v1.
 
 Index: `item_id`.
 
+### `MonthClose`
+
+One row per user and closed leftover-allocation period. Presence of a row (or leftover ≤ 0) unlocks new-month expense writes.
+
+| Field                | Type        | Description                                  |
+| -------------------- | ----------- | -------------------------------------------- |
+| `id`                 | `String` PK | Close id                                     |
+| `user_id`            | `String` FK | Owner id                                     |
+| `period`             | `String`    | Closed period key, e.g. `2026-09`            |
+| `free_savings_cents` | `Int`       | Leftover cash (`salary − expenses`) at close |
+| `allocated_cents`    | `Int`       | Sum of contributions written during close    |
+| `currency`           | `String`    | Snapshot of summary currency                 |
+| `closed_at`          | `DateTime`  | Close timestamp                              |
+
+Unique constraint: `(user_id, period)`. Index: `user_id`. Cascade-deletes with the user.
+
 ### `Template`
 
 HTML email template with dynamic placeholders.
@@ -293,6 +310,7 @@ erDiagram
   User ||--o{ AiUsageLog : aiUsage
   User ||--o| MonthlyBudget : monthlyBudget
   User ||--o{ SavingsGoalEvent : savingsGoalEvents
+  User ||--o{ MonthClose : monthCloses
   SavingsGoalEvent ||--o{ SavingsGoalItem : items
   SavingsGoalItem ||--o{ SavingsGoalContribution : contributions
   User {
@@ -376,6 +394,15 @@ erDiagram
     string note
     datetime created_at
   }
+  MonthClose {
+    string id PK
+    string user_id FK
+    string period
+    int free_savings_cents
+    int allocated_cents
+    string currency
+    datetime closed_at
+  }
   AiUsageLog {
     string id PK
     string user_id FK
@@ -407,6 +434,7 @@ erDiagram
 | `20260819213000_add_monthly_budget`                  | Adds `MonthlyBudget` table (one reusable category budget template per user)                               |
 | `20260820200000_add_extra_expense_to_monthly_budget` | Adds nullable `extra_expense` JSON on `MonthlyBudget` (one-off expense + category cut percents)           |
 | `20260902190000_add_savings_goals`                   | Adds `SavingsGoalEvent`, `SavingsGoalItem`, and `SavingsGoalContribution` (long-term savings goals)       |
+| `20260910200000_add_month_close`                     | Adds `MonthClose` (one leftover-allocation close per user/period)                                         |
 
 ## Business rules
 
@@ -425,7 +453,8 @@ erDiagram
 - Category keys in analytics JSON and `MonthlyBudget.categories` must belong to the closed vocabulary listed above.
 - Report currency is restricted by the API to `PLN`, `EUR`, `USD`, `GBP`, `CHF`, `CZK`, or `UAH`; it controls AI output formatting and does not perform exchange-rate conversion.
 - AI spend is capped monthly per user (`User.ai_credit_limit`). Credits = `ceil(total_tokens / AI_TOKENS_PER_CREDIT)`. Manual AI actions fail when the budget is exhausted; cron summaries skip those users.
-- `deleteMyAccount` removes the Supabase Auth identity, local profile (including cascaded templates, summary logs, summary analytics, monthly budget, savings goal events/items/contributions, and AI usage logs), and best-effort removes the uploaded expense file.
+- `deleteMyAccount` removes the Supabase Auth identity, local profile (including cascaded templates, summary logs, summary analytics, monthly budget, savings goal events/items/contributions, month closes, and AI usage logs), and best-effort removes the uploaded expense file.
+- When leftover cash from the previous calendar month is positive and no `MonthClose` exists, `saveCurrentMonthExpenses`, expense file upload/overwrite, and `approveReceiptExpenses` fail with `MONTH_NOT_CLOSED` until `closeMonth` allocates 100% of leftover to owned same-currency sub-goals.
 
 See [cron-summaries.md](./cron-summaries.md) for batch processing details.
 

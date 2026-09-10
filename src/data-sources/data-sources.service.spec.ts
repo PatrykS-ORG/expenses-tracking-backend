@@ -16,15 +16,20 @@ describe('DataSourcesService current-month expenses', () => {
   const aiService = {
     categorizeExpenses: jest.fn(),
   };
+  const monthCloseService = {
+    assertMonthWritable: jest.fn(),
+  };
 
   const service = new DataSourcesService(
     storageService as never,
     templatesService as never,
     aiService as never,
+    monthCloseService,
   );
 
   beforeEach(() => {
     jest.clearAllMocks();
+    monthCloseService.assertMonthWritable.mockResolvedValue(undefined);
   });
 
   it('returns empty breakdown when no file is configured', async () => {
@@ -109,6 +114,25 @@ Netflix 59.00
         unassigned: [],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects save when the previous month still needs closure', async () => {
+    monthCloseService.assertMonthWritable.mockRejectedValue(
+      new BadRequestException('MONTH_NOT_CLOSED'),
+    );
+
+    await expect(
+      service.saveCurrentMonthExpenses('user-1', 'a@b.c', {
+        categories: [
+          {
+            key: 'Groceries',
+            items: [{ name: 'Biedronka', amount: '10.00' }],
+          },
+        ],
+        unassigned: [],
+      }),
+    ).rejects.toMatchObject({ message: 'MONTH_NOT_CLOSED' });
+    expect(storageService.overwriteExpenseFile).not.toHaveBeenCalled();
   });
 
   it('suggests categories only for unassigned items', async () => {

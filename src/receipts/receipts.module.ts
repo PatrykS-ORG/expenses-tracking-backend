@@ -3,11 +3,18 @@ import { AiModule } from '../ai/ai.module';
 import { DataSourcesModule } from '../data-sources/data-sources.module';
 import { TemplatesModule } from '../templates/templates.module';
 import { UsersModule } from '../users/users.module';
+import { MonthCloseModule } from '../month-close/month-close.module';
 import { ReceiptsResolver } from './receipts.resolver';
 import { ReceiptsService } from './receipts.service';
 
 @Module({
-  imports: [AiModule, DataSourcesModule, TemplatesModule, UsersModule],
+  imports: [
+    AiModule,
+    DataSourcesModule,
+    TemplatesModule,
+    UsersModule,
+    MonthCloseModule,
+  ],
   providers: [ReceiptsResolver, ReceiptsService],
 })
 export class ReceiptsModule {}

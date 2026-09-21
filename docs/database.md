@@ -12,23 +12,24 @@ PostgreSQL is hosted on Supabase and accessed through Prisma 7 (`@prisma/client`
 
 Application profile linked to Supabase Auth (`User.id` should match JWT `sub`).
 
-| Field                    | Type                   | Description                                              |
-| ------------------------ | ---------------------- | -------------------------------------------------------- |
-| `id`                     | `String` PK            | Supabase Auth UID                                        |
-| `email`                  | `String` unique        | User email                                               |
-| `data_source_type`       | `DataSourceType`       | Selected source (`FILE_UPLOAD` / `NEXTCLOUD`)            |
-| `data_source_config`     | `Json?`                | Provider-specific configuration payload                  |
-| `active_template_id`     | `String?` FK           | Currently active template                                |
-| `summary_schedule_day`   | `Int`                  | Day of month for automatic summary (`1-28`, default `1`) |
-| `summary_schedule_hour`  | `Int`                  | Hour of day for automatic summary (`0-23`, default `8`)  |
-| `summary_timezone`       | `String`               | IANA timezone (default `Europe/Warsaw`)                  |
-| `summary_email_language` | `SummaryEmailLanguage` | Email output language (`PL` / `EN`, default `PL`)        |
-| `summary_currency`       | `String`               | Report currency (default `PLN`)                          |
-| `summary_enabled`        | `Boolean`              | Whether user receives automatic summaries                |
-| `next_summary_at`        | `DateTime?`            | Next planned send timestamp (UTC)                        |
-| `salary_cents`           | `Int?`                 | Current salary/income in minor units (required for send) |
-| `ai_credit_limit`        | `Int`                  | Monthly AI credit budget (default `50`)                  |
-| `created_at`             | `DateTime`             | Profile creation timestamp                               |
+| Field                    | Type                   | Description                                                                                                                  |
+| ------------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `id`                     | `String` PK            | Supabase Auth UID                                                                                                            |
+| `email`                  | `String` unique        | User email                                                                                                                   |
+| `data_source_type`       | `DataSourceType`       | Selected source (`FILE_UPLOAD` / `NEXTCLOUD`)                                                                                |
+| `data_source_config`     | `Json?`                | Provider-specific configuration payload                                                                                      |
+| `active_template_id`     | `String?` FK           | Currently active template                                                                                                    |
+| `summary_schedule_day`   | `Int`                  | Day of month for automatic summary (`1-28`, default `1`)                                                                     |
+| `summary_schedule_hour`  | `Int`                  | Hour of day for automatic summary (`0-23`, default `8`)                                                                      |
+| `summary_timezone`       | `String`               | IANA timezone (default `Europe/Warsaw`)                                                                                      |
+| `summary_email_language` | `SummaryEmailLanguage` | Email output language (`PL` / `EN`, default `PL`)                                                                            |
+| `summary_currency`       | `String`               | Report currency (default `PLN`)                                                                                              |
+| `summary_enabled`        | `Boolean`              | Whether user receives automatic summaries                                                                                    |
+| `next_summary_at`        | `DateTime?`            | Next planned send timestamp (UTC)                                                                                            |
+| `salary_cents`           | `Int?`                 | Current salary/income in minor units (required for send)                                                                     |
+| `expense_open_period`    | `String?`              | Calendar month (`YYYY-MM`) the live expense file belongs to. Null is anchored to the current month on the next closure check |
+| `ai_credit_limit`        | `Int`                  | Monthly AI credit budget (default `50`)                                                                                      |
+| `created_at`             | `DateTime`             | Profile creation timestamp                                                                                                   |
 
 Relations:
 
@@ -326,6 +327,7 @@ erDiagram
     boolean summary_enabled
     datetime next_summary_at
     int salary_cents
+    string expense_open_period
     int ai_credit_limit
     datetime created_at
   }
@@ -435,6 +437,7 @@ erDiagram
 | `20260820200000_add_extra_expense_to_monthly_budget` | Adds nullable `extra_expense` JSON on `MonthlyBudget` (one-off expense + category cut percents)           |
 | `20260902190000_add_savings_goals`                   | Adds `SavingsGoalEvent`, `SavingsGoalItem`, and `SavingsGoalContribution` (long-term savings goals)       |
 | `20260910200000_add_month_close`                     | Adds `MonthClose` (one leftover-allocation close per user/period)                                         |
+| `20260921190000_add_expense_open_period`             | Adds nullable `User.expense_open_period` (calendar month the live expense file belongs to)                |
 
 ## Business rules
 
@@ -454,7 +457,7 @@ erDiagram
 - Report currency is restricted by the API to `PLN`, `EUR`, `USD`, `GBP`, `CHF`, `CZK`, or `UAH`; it controls AI output formatting and does not perform exchange-rate conversion.
 - AI spend is capped monthly per user (`User.ai_credit_limit`). Credits = `ceil(total_tokens / AI_TOKENS_PER_CREDIT)`. Manual AI actions fail when the budget is exhausted; cron summaries skip those users.
 - `deleteMyAccount` removes the Supabase Auth identity, local profile (including cascaded templates, summary logs, summary analytics, monthly budget, savings goal events/items/contributions, month closes, and AI usage logs), and best-effort removes the uploaded expense file.
-- When leftover cash from the previous calendar month is positive and no `MonthClose` exists, `saveCurrentMonthExpenses`, expense file upload/overwrite, and `approveReceiptExpenses` fail with `MONTH_NOT_CLOSED` until `closeMonth` allocates 100% of leftover to owned same-currency sub-goals.
+- When `User.expense_open_period` is an earlier month than the current calendar month, leftover cash is positive, and no `MonthClose` exists for the previous period, `saveCurrentMonthExpenses`, expense file upload/overwrite, and `approveReceiptExpenses` fail with `MONTH_NOT_CLOSED` until `closeMonth` allocates 100% of leftover to owned same-currency sub-goals. A null `expense_open_period` is stored as the current month on the next check, so the in-progress month stays writable. `closeMonth` and later expense writes set `expense_open_period` to the current month.
 
 See [cron-summaries.md](./cron-summaries.md) for batch processing details.
 

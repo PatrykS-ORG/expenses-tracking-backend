@@ -52,7 +52,7 @@ export class DataSourcesService {
     userEmail: string | undefined,
     input: ExpenseFileUploadInput,
   ): Promise<UploadedExpenseFile> {
-    await this.monthCloseService.assertMonthWritable(userId, userEmail);
+    await this.monthCloseService.beginExpenseWrite(userId, userEmail);
     const file = decodeUploadedFile(input);
     const uploadedFileConfig = await this.storageService.uploadExpenseFile(
       userId,
@@ -99,7 +99,7 @@ export class DataSourcesService {
     userEmail: string | undefined,
     input: SaveCurrentMonthExpensesInput,
   ): Promise<CurrentMonthExpenses> {
-    await this.monthCloseService.assertMonthWritable(userId, userEmail);
+    await this.monthCloseService.beginExpenseWrite(userId, userEmail);
     const categorized = this.parseSaveInput(input);
     const content = serializeCategorizedExpenseFile(categorized);
     await this.writeExpenseFileContent(userId, userEmail, content);
@@ -173,7 +173,7 @@ export class DataSourcesService {
     userEmail: string | undefined,
     input: ExpenseFileUploadInput,
   ): Promise<UploadedExpenseFile> {
-    await this.monthCloseService.assertMonthWritable(userId, userEmail);
+    await this.monthCloseService.beginExpenseWrite(userId, userEmail);
     const file = decodeUploadedFile(input);
     const existingConfig =
       await this.templatesService.tryGetFileUploadSourceConfig(

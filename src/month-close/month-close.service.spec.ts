@@ -11,7 +11,7 @@ describe('MonthCloseService', () => {
   let service: MonthCloseService;
 
   const prismaMock = {
-    user: { findUnique: jest.fn() },
+    user: { findUnique: jest.fn(), updateMany: jest.fn() },
     monthClose: { findUnique: jest.fn() },
     savingsGoalItem: { findMany: jest.fn() },
     $transaction: jest.fn(),
@@ -35,6 +35,7 @@ describe('MonthCloseService', () => {
       salary_cents: 500_000,
       summary_currency: 'PLN',
       summary_timezone: 'Europe/Warsaw',
+      expense_open_period: '2026-09',
     });
     prismaMock.monthClose.findUnique.mockResolvedValue(null);
     dataSourcesServiceMock.readExpenseFileContentOrEmpty.mockResolvedValue(
@@ -76,6 +77,7 @@ describe('MonthCloseService', () => {
       salary_cents: 5_000,
       summary_currency: 'PLN',
       summary_timezone: 'Europe/Warsaw',
+      expense_open_period: '2026-09',
     });
 
     const status = await service.getStatus('user-1', 'a@b.c');
@@ -103,6 +105,67 @@ describe('MonthCloseService', () => {
     expect(clockMock.now).toHaveBeenCalledWith('2026-10-01T00:00:00.000+02:00');
     expect(status.period).toBe('2026-09');
     expect(status.currentPeriod).toBe('2026-10');
+  });
+
+  it('does not block the current month when the open period is still this month', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      salary_cents: 500_000,
+      summary_currency: 'PLN',
+      summary_timezone: 'Europe/Warsaw',
+      expense_open_period: '2026-10',
+    });
+
+    await expect(
+      service.assertMonthWritable('user-1', 'a@b.c'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('anchors a missing open period to the current month so in-progress files stay writable', async () => {
+    clockMock.now.mockReturnValue(new Date('2026-09-21T10:00:00.000Z'));
+    prismaMock.user.findUnique.mockResolvedValue({
+      salary_cents: 500_000,
+      summary_currency: 'PLN',
+      summary_timezone: 'Europe/Warsaw',
+      expense_open_period: null,
+    });
+    prismaMock.user.updateMany.mockResolvedValue({ count: 1 });
+
+    const status = await service.getStatus('user-1', 'a@b.c');
+
+    expect(status.needsClosure).toBe(false);
+    expect(status.currentPeriod).toBe('2026-09');
+    expect(status.freeSavingsCents).toBe(490_000);
+    expect(prismaMock.user.updateMany).toHaveBeenCalledWith({
+      where: { id: 'user-1', expense_open_period: null },
+      data: { expense_open_period: '2026-09' },
+    });
+  });
+
+  it('advances the open period before a write once closure is no longer required', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      salary_cents: 5_000,
+      summary_currency: 'PLN',
+      summary_timezone: 'Europe/Warsaw',
+      expense_open_period: '2026-09',
+    });
+    prismaMock.user.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.beginExpenseWrite('user-1', 'a@b.c');
+
+    expect(prismaMock.user.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'user-1',
+        NOT: { expense_open_period: '2026-10' },
+      },
+      data: { expense_open_period: '2026-10' },
+    });
+  });
+
+  it('does not advance the open period when closure is still required', async () => {
+    await expect(
+      service.beginExpenseWrite('user-1', 'a@b.c'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prismaMock.user.updateMany).not.toHaveBeenCalled();
   });
 
   it('blocks writes while the previous month still needs closure', async () => {
@@ -168,11 +231,16 @@ describe('MonthCloseService', () => {
             create: jest.fn(),
           },
           monthClose: { create: jest.fn() },
+          user: { update: jest.fn() },
         };
         await fn(tx);
         expect(tx.savingsGoalContribution.create).toHaveBeenCalledTimes(1);
         expect(tx.summaryAnalytics.create).toHaveBeenCalledTimes(1);
         expect(tx.monthClose.create).toHaveBeenCalledTimes(1);
+        expect(tx.user.update).toHaveBeenCalledWith({
+          where: { id: 'user-1' },
+          data: { expense_open_period: '2026-10' },
+        });
       },
     );
     prismaMock.monthClose.findUnique

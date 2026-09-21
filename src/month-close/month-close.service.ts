@@ -59,6 +59,19 @@ export class MonthCloseService {
     }
   }
 
+  /**
+   * Gate the write, then attach the live expense file to the current calendar
+   * month before its contents change. That way a new-month upload is not later
+   * judged against the previous period's leftover.
+   */
+  async beginExpenseWrite(
+    userId: string,
+    userEmail: string | undefined,
+  ): Promise<void> {
+    await this.assertMonthWritable(userId, userEmail);
+    await this.markExpenseFileCurrent(userId);
+  }
+
   async closeMonth(
     userId: string,
     userEmail: string | undefined,
@@ -170,6 +183,11 @@ export class MonthCloseService {
             closed_at: now,
           },
         });
+
+        await tx.user.update({
+          where: { id: userId },
+          data: { expense_open_period: status.currentPeriod },
+        });
       });
     } catch (error) {
       if (
@@ -201,6 +219,7 @@ export class MonthCloseService {
         salary_cents: true,
         summary_currency: true,
         summary_timezone: true,
+        expense_open_period: true,
       },
     });
     if (!user) {
@@ -211,6 +230,11 @@ export class MonthCloseService {
     const timezone = normalizeTimezone(user.summary_timezone);
     const currentPeriod = getCurrentCalendarPeriod(timezone, now);
     const previousPeriod = getSummaryPeriod(timezone, now);
+    const expenseOpenPeriod = await this.resolveExpenseOpenPeriod(
+      userId,
+      user.expense_open_period,
+      currentPeriod,
+    );
     const alreadyClosed = Boolean(
       await this.prisma.monthClose.findUnique({
         where: {
@@ -234,10 +258,55 @@ export class MonthCloseService {
     return evaluateMonthClosure({
       currentPeriod,
       previousPeriod,
+      expenseOpenPeriod,
       alreadyClosed,
       salaryCents: user.salary_cents ?? 0,
       totalExpensesCents,
       currency: user.summary_currency,
+    });
+  }
+
+  /**
+   * A missing period means the live file has not been tied to a month yet
+   * (existing rows from before month close, or a brand-new profile). Treat it
+   * as the current calendar month and persist that so the next month boundary
+   * can require closure. Do not overwrite a period another request already set.
+   */
+  private async resolveExpenseOpenPeriod(
+    userId: string,
+    storedPeriod: string | null,
+    currentPeriod: string,
+  ): Promise<string> {
+    if (storedPeriod) {
+      return storedPeriod;
+    }
+
+    await this.prisma.user.updateMany({
+      where: { id: userId, expense_open_period: null },
+      data: { expense_open_period: currentPeriod },
+    });
+    return currentPeriod;
+  }
+
+  private async markExpenseFileCurrent(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { summary_timezone: true },
+    });
+    if (!user) {
+      return;
+    }
+
+    const currentPeriod = getCurrentCalendarPeriod(
+      normalizeTimezone(user.summary_timezone),
+      this.clock.now(),
+    );
+    await this.prisma.user.updateMany({
+      where: {
+        id: userId,
+        NOT: { expense_open_period: currentPeriod },
+      },
+      data: { expense_open_period: currentPeriod },
     });
   }
 

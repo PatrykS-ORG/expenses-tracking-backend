@@ -4,6 +4,7 @@ describe('month-close.logic', () => {
   const base = {
     currentPeriod: '2026-10',
     previousPeriod: '2026-09',
+    expenseOpenPeriod: '2026-09',
     currency: 'PLN',
   };
 
@@ -43,6 +44,18 @@ describe('month-close.logic', () => {
         alreadyClosed: false,
         salaryCents: 100_000,
         totalExpensesCents: 150_000,
+      }).needsClosure,
+    ).toBe(false);
+  });
+
+  it('does not require closure while the expense file is still the current month', () => {
+    expect(
+      evaluateMonthClosure({
+        ...base,
+        expenseOpenPeriod: '2026-10',
+        alreadyClosed: false,
+        salaryCents: 500_000,
+        totalExpensesCents: 0,
       }).needsClosure,
     ).toBe(false);
   });

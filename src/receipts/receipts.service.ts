@@ -34,7 +34,7 @@ export class ReceiptsService {
       throw new BadRequestException('Receipt expense text cannot be empty');
     }
 
-    await this.monthCloseService.assertMonthWritable(userId, userEmail);
+    await this.monthCloseService.beginExpenseWrite(userId, userEmail);
 
     const uploadedFileConfig =
       await this.templatesService.getFileUploadSourceConfig(userId, userEmail);

@@ -17,19 +17,19 @@ describe('DataSourcesService current-month expenses', () => {
     categorizeExpenses: jest.fn(),
   };
   const monthCloseService = {
-    assertMonthWritable: jest.fn(),
+    beginExpenseWrite: jest.fn(),
   };
 
   const service = new DataSourcesService(
     storageService as never,
     templatesService as never,
     aiService as never,
-    monthCloseService,
+    monthCloseService as never,
   );
 
   beforeEach(() => {
     jest.clearAllMocks();
-    monthCloseService.assertMonthWritable.mockResolvedValue(undefined);
+    monthCloseService.beginExpenseWrite.mockResolvedValue(undefined);
   });
 
   it('returns empty breakdown when no file is configured', async () => {
@@ -117,7 +117,7 @@ Netflix 59.00
   });
 
   it('rejects save when the previous month still needs closure', async () => {
-    monthCloseService.assertMonthWritable.mockRejectedValue(
+    monthCloseService.beginExpenseWrite.mockRejectedValue(
       new BadRequestException('MONTH_NOT_CLOSED'),
     );
 

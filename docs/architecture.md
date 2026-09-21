@@ -219,7 +219,7 @@ Product rules: [month-close.md](../../expenses-tracking-docs/features/month-clos
 
 When a new calendar month starts in `User.summary_timezone` and leftover cash from the previous period is **positive** (`salary_cents − total expense-file amount`), the user must close that month before writing new expenses.
 
-`monthClosureStatus` exposes `needsClosure` and leftover. `needsClosure` is true only when leftover **> 0** and no `MonthClose` row exists for the previous period. Zero or negative leftover does not block the new month.
+`monthClosureStatus` exposes `needsClosure` and leftover. `needsClosure` is true only when `User.expense_open_period` is an earlier month than the current calendar month, leftover **> 0**, and no `MonthClose` row exists for the previous period. The live file is the current month's working file until the calendar rolls past `expense_open_period`. A missing period is anchored to the current month, so in-progress and first-month files stay writable. Zero or negative leftover does not block the new month. Expense writes and `closeMonth` set `expense_open_period` to the current month.
 
 `closeMonth` runs in one transaction:
 

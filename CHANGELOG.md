@@ -7,6 +7,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Sections are generated automatically by `.github/workflows/release.yml` on each push to `production`.
 
+## [0.0.24] - 2026-09-21
+
+### Bug Fixes
+- Do not block expense writes during the open month
+
 ## [0.0.23] - 2026-09-21
 
 ### Features

@@ -2,6 +2,7 @@ import { decodeUploadedFile } from '../common/decode-uploaded-file';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { AiService } from '../ai/ai.service';
 import { SupabaseStorageService } from '../data-sources/supabase-storage.service';
+import { MonthCloseService } from '../month-close/month-close.service';
 import { ScanReceiptInput } from './dto/scan-receipt.input';
 import { ReceiptScanResult } from './models/receipt-scan-result.model';
 import { TemplatesService } from '../templates/templates.service';
@@ -20,6 +21,7 @@ export class ReceiptsService {
     private readonly templatesService: TemplatesService,
     private readonly aiService: AiService,
     private readonly userProfileService: UserProfileService,
+    private readonly monthCloseService: MonthCloseService,
   ) {}
 
   async approveReceiptExpenses(
@@ -31,6 +33,8 @@ export class ReceiptsService {
     if (!trimmedText) {
       throw new BadRequestException('Receipt expense text cannot be empty');
     }
+
+    await this.monthCloseService.assertMonthWritable(userId, userEmail);
 
     const uploadedFileConfig =
       await this.templatesService.getFileUploadSourceConfig(userId, userEmail);

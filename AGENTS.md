@@ -4,7 +4,7 @@ NestJS 11 API for **ExpenseAI**.
 Current scope includes:
 
 - Supabase JWT auth (GraphQL guards)
-- Prisma persistence (`User`, `Template`, `SummaryLog`, `SummaryAnalytics`, `MonthlyBudget`, `SavingsGoalEvent`, `SavingsGoalItem`, `SavingsGoalContribution`, `AiUsageLog`)
+- Prisma persistence (`User`, `Template`, `SummaryLog`, `SummaryAnalytics`, `MonthlyBudget`, `SavingsGoalEvent`, `SavingsGoalItem`, `SavingsGoalContribution`, `MonthClose`, `AiUsageLog`)
 - AI template generation and expense analysis (DeepSeek)
 - Monthly AI credit limits + spend audit (`AiUsageModule`)
 - Data-source abstraction (`FILE_UPLOAD` via Supabase Storage, `NEXTCLOUD` via WebDAV)
@@ -59,6 +59,7 @@ src/
 ├── summary/                 # Summary schedule + analytics GraphQL + batch pipeline
 ├── budget/                  # Monthly category budget template GraphQL
 ├── savings-goals/           # Long-term savings events, sub-goals, contribution log GraphQL
+├── month-close/             # Month-close leftover allocation GraphQL + write guard
 ├── cron/                    # Secured REST webhook for hourly summaries
 ├── email/                   # Brevo client + HTML template rendering helper
 ├── users/                   # Profile provisioning + account deletion
@@ -93,6 +94,7 @@ prisma/
 - AI: `DEEPSEEK_API_KEY`, `DEEPSEEK_VISION_MODEL`, `RECEIPT_OCR_LANG`, `AI_TOKENS_PER_CREDIT`, `AI_MONTHLY_CREDIT_LIMIT`
 - Email: `BREVO_API_KEY`, `MAIL_SENDER`, `MAIL_SENDER_NAME`, `BREVO_BASE_URL`
 - Nextcloud: `NEXTCLOUD_WEBDAV_URL`, `NEXTCLOUD_USERNAME`, `NEXTCLOUD_PASSWORD`
+- Dev/test: `TEST_NOW_ISO` (month-close clock; ignored in production)
 
 ## Common pitfalls
 

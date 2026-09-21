@@ -6,14 +6,10 @@ ExpenseAI backend is a NestJS modular monolith between the React frontend and Su
 
 Implemented integrations:
 
-- DeepSeek (`AiService`) for template generation, expense analysis, and receipt text extraction.
+- DeepSeek (`AiService`) for template generation, expense analysis, receipt text extraction, and Suggest categories.
 - Tesseract.js + Sharp (`ReceiptOcrService`) for receipt image preprocessing and OCR (`eng.traineddata` / `pol.traineddata` at repo root).
-- Brevo HTTP API (`EmailService`) for sending rendered test emails.
-- Supabase Storage + Nextcloud WebDAV as pluggable expense data sources.
-
-Planned (not wired yet):
-
-- ~~Monthly cron webhook pipeline (`/api/cron/process-summaries`).~~ Implemented — see [cron-summaries.md](./cron-summaries.md).
+- Brevo HTTP API (`EmailService`) for scheduled / send-now monthly summary emails and rendered test emails.
+- Supabase Storage + Nextcloud WebDAV as pluggable expense data sources (`FILE_UPLOAD` / `NEXTCLOUD` only — no Drive/Dropbox).
 
 ```mermaid
 flowchart LR
@@ -25,15 +21,18 @@ flowchart LR
     GQL[GraphQL_Apollo]
     REST[REST_endpoints]
     AuthMod[AuthModule]
+    UsersMod[UsersModule]
     TemplatesMod[TemplatesModule]
     DataSourcesMod[DataSourcesModule]
     EmailMod[EmailModule]
     AiMod[AiModule]
     AiUsageMod[AiUsageModule]
+    OcrMod[ReceiptOcrModule]
     ReceiptsMod[ReceiptsModule]
     SummaryMod[SummaryModule]
     BudgetMod[BudgetModule]
     SavingsGoalsMod[SavingsGoalsModule]
+    MonthCloseMod[MonthCloseModule]
     CronMod[CronModule]
     PrismaSvc[PrismaService]
   end
@@ -45,7 +44,7 @@ flowchart LR
   subgraph external [External]
     DeepSeek[DeepSeek_API]
     Tesseract[Tesseract_OCR]
-    Brevo[Brevo_API]
+    Brevo[Brevo_summary_and_test_email]
     Nextcloud[Nextcloud_WebDAV]
   end
 
@@ -56,6 +55,8 @@ flowchart LR
   GQL --> AuthMod
   REST --> AuthMod
   AuthMod --> SupaAuth
+  AuthMod --> UsersMod
+  UsersMod --> PrismaSvc
   TemplatesMod --> PrismaSvc
   TemplatesMod --> AiMod
   TemplatesMod --> EmailMod
@@ -77,6 +78,10 @@ flowchart LR
   SummaryMod --> DataSourcesMod
   BudgetMod --> PrismaSvc
   SavingsGoalsMod --> PrismaSvc
+  MonthCloseMod --> PrismaSvc
+  MonthCloseMod --> DataSourcesMod
+  MonthCloseMod --> SavingsGoalsMod
+  MonthCloseMod --> SummaryMod
   CronMod --> SummaryMod
   PrismaSvc --> Postgres
 ```
@@ -89,6 +94,7 @@ flowchart LR
 - `GraphQLModule` (Code First, `src/schema.gql`)
 - `PrismaModule`
 - `AuthModule`
+- `UsersModule`
 - `AiUsageModule`
 - `AiModule`
 - `TemplatesModule`
@@ -98,26 +104,30 @@ flowchart LR
 - `SummaryModule`
 - `BudgetModule`
 - `SavingsGoalsModule`
+- `MonthCloseModule`
 - `CronModule`
+
+`src/common` holds shared helpers (not a feature module imported by `AppModule`).
 
 ### Implemented modules
 
-| Module               | Responsibility                                                               |
-| -------------------- | ---------------------------------------------------------------------------- |
-| `AuthModule`         | JWT strategy + guards for REST/GraphQL                                       |
-| `UsersModule`        | User-profile provisioning and authenticated account deletion                 |
-| `PrismaModule`       | Shared Prisma adapter client                                                 |
-| `AiUsageModule`      | Monthly AI credit limits, usage audit log, GraphQL usage queries             |
-| `AiModule`           | DeepSeek template generation, expense analysis, and receipt extraction       |
-| `ReceiptOcrModule`   | Tesseract worker lifecycle, image preprocessing (Sharp), OCR text extraction |
-| `TemplatesModule`    | Template CRUD + active template + source settings + test-email mutation      |
-| `DataSourcesModule`  | Source providers, upload endpoint, source resolution                         |
-| `EmailModule`        | Brevo email sending                                                          |
-| `ReceiptsModule`     | Receipt scan + `approveReceiptExpenses` GraphQL mutations + OCR              |
-| `SummaryModule`      | Summary schedule + monthly analytics GraphQL + batch summary pipeline        |
-| `BudgetModule`       | Reusable monthly category budget template GraphQL                            |
-| `SavingsGoalsModule` | Long-term savings events, sub-goals, and contribution-log GraphQL            |
-| `CronModule`         | Secured REST webhook for hourly batch processing                             |
+| Module               | Responsibility                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------- |
+| `AuthModule`         | JWT strategy + guards for REST/GraphQL                                                 |
+| `UsersModule`        | User-profile provisioning and authenticated account deletion                           |
+| `PrismaModule`       | Shared Prisma adapter client                                                           |
+| `AiUsageModule`      | Monthly AI credit limits, usage audit log, GraphQL usage queries                       |
+| `AiModule`           | DeepSeek template generation, expense analysis, Suggest categories, receipt extraction |
+| `ReceiptOcrModule`   | Tesseract worker lifecycle, image preprocessing (Sharp), OCR text extraction           |
+| `TemplatesModule`    | Template CRUD + active template + source settings + test-email mutation                |
+| `DataSourcesModule`  | Source providers, upload endpoint, source resolution                                   |
+| `EmailModule`        | Brevo email sending (summary delivery + test email)                                    |
+| `ReceiptsModule`     | Receipt scan + `approveReceiptExpenses` GraphQL mutations + OCR                        |
+| `SummaryModule`      | Summary schedule + monthly analytics GraphQL + batch summary pipeline                  |
+| `BudgetModule`       | Reusable monthly category budget (+ optional extra-expense) GraphQL                    |
+| `SavingsGoalsModule` | Long-term savings events, sub-goals, and contribution-log GraphQL                      |
+| `MonthCloseModule`   | Month-close status, leftover allocation mutation, and new-month write guard            |
+| `CronModule`         | Secured REST webhook for hourly batch processing                                       |
 
 ### REST endpoints
 
@@ -129,12 +139,12 @@ flowchart LR
 
 1. Frontend authenticates with Supabase (email/password or Google OAuth 2.0) and gets `access_token`.
 2. Frontend calls NestJS with `Authorization: Bearer <token>`.
-3. REST uses `JwtAuthGuard`; GraphQL uses `GqlAuthGuard`. (REST controllers were removed; guards remain available if REST is reintroduced.)
+3. REST uses `JwtAuthGuard`; GraphQL uses `GqlAuthGuard`. (REST controllers were removed except cron; guards remain available if REST is reintroduced.)
 4. `JwtStrategy` validates token via:
    - Supabase JWKS (`SUPABASE_URL`) for ES256 projects
    - or legacy `SUPABASE_JWT_SECRET` for HS256
 5. Handlers get user via `@CurrentUser()` / `@CurrentUserGql()`.
-6. `UserProfileService.ensureUserProfile` upserts local `User` profile on first authenticated access.
+6. `UserProfileService.ensureUserProfile` upserts local `User` profile on first authenticated access (UsersModule).
 
 ## Data-source architecture
 
@@ -154,52 +164,74 @@ Expense data source is resolved per user from:
 
 All client-facing operations are exposed through GraphQL at `/graphql`.
 
-| Kind     | Name                            | Auth   | Notes                                                                                            |
-| -------- | ------------------------------- | ------ | ------------------------------------------------------------------------------------------------ |
-| Query    | `health`                        | Public | Health/hello smoke check                                                                         |
-| Query    | `myProfile`                     | JWT    | Auth smoke test                                                                                  |
-| Query    | `myTemplates`                   | JWT    | List current user templates                                                                      |
-| Query    | `myTemplateSettings`            | JWT    | Active template + source settings                                                                |
-| Query    | `currentExpenseFile`            | JWT    | Current uploaded file metadata + content                                                         |
-| Query    | `currentMonthExpenses`          | JWT    | Structured category + unassigned breakdown of the uploaded expense file                          |
-| Mutation | `generateTemplate`              | JWT    | Generate template via DeepSeek                                                                   |
-| Mutation | `createTemplate`                | JWT    | Create template                                                                                  |
-| Mutation | `updateTemplate`                | JWT    | Update template                                                                                  |
-| Mutation | `deleteTemplate`                | JWT    | Delete template                                                                                  |
-| Mutation | `setActiveTemplate`             | JWT    | Set active template                                                                              |
-| Mutation | `updateDataSource`              | JWT    | Switch/update source config                                                                      |
-| Mutation | `uploadExpenseFile`             | JWT    | Upload `.txt/.csv` (max 5MB, base64), set source to `FILE_UPLOAD`                                |
-| Mutation | `overwriteCurrentExpenseFile`   | JWT    | Overwrite currently configured uploaded file (base64)                                            |
-| Mutation | `saveCurrentMonthExpenses`      | JWT    | Serialize categorized + unassigned items and overwrite the uploaded expense file                 |
-| Mutation | `suggestExpenseCategories`      | JWT    | AI-suggest categories for unassigned expense lines (uses AI credits; does not auto-save)         |
-| Mutation | `sendTestEmail`                 | JWT    | Render active template with sample values and send via Brevo                                     |
-| Query    | `mySummarySchedule`             | JWT    | Read automatic summary schedule settings                                                         |
-| Mutation | `updateSummarySchedule`         | JWT    | Update schedule and recalculate `next_summary_at`                                                |
-| Mutation | `updateSalary`                  | JWT    | Persist current profile salary (`User.salary_cents`) from a money string                         |
-| Mutation | `sendSummaryNow`                | JWT    | Analyze the current expense file and email a real summary without changing schedule              |
-| Query    | `mySummaries`                   | JWT    | List persisted monthly analytics for ended months (`period < current YYYY-MM`)                   |
-| Query    | `mySummary(month)`              | JWT    | Single-month analytics (`null` if current/future or missing); months before `2026-01` rejected   |
-| Query    | `summaryCategoryKeys`           | JWT    | Closed English category vocabulary for manual backfill UI                                        |
-| Mutation | `createManualSummary`           | JWT    | Create historical analytics (`source = MANUAL`) for any ended month (`period < current YYYY-MM`) |
-| Mutation | `updateManualSummary`           | JWT    | Update an existing analytics row for an ended month (scheduled or manual)                        |
-| Query    | `myMonthlyBudget`               | JWT    | Current reusable monthly category budget (`null` if never saved)                                 |
-| Mutation | `saveMonthlyBudget`             | JWT    | Upsert the user's monthly category budget template (persists until overwritten)                  |
-| Query    | `mySavingsGoals`                | JWT    | Long-term savings events with sub-goals, contributions, and derived progress                     |
-| Mutation | `createSavingsGoalEvent`        | JWT    | Create a named long-term savings event                                                           |
-| Mutation | `updateSavingsGoalEvent`        | JWT    | Update an owned event name, currency, or target date                                             |
-| Mutation | `deleteSavingsGoalEvent`        | JWT    | Delete an owned event (cascades items and contributions)                                         |
-| Mutation | `createSavingsGoalItem`         | JWT    | Add a sub-goal to an owned event; returns the parent event                                       |
-| Mutation | `updateSavingsGoalItem`         | JWT    | Update an owned sub-goal; returns the parent event                                               |
-| Mutation | `deleteSavingsGoalItem`         | JWT    | Delete an owned sub-goal; returns the parent event                                               |
-| Mutation | `addSavingsGoalContribution`    | JWT    | Append a dated deposit to an owned sub-goal; returns the parent event                            |
-| Mutation | `deleteSavingsGoalContribution` | JWT    | Delete an owned contribution; returns the parent event                                           |
-| Mutation | `deleteMyAccount`               | JWT    | Delete Supabase Auth identity, profile data, and uploaded expense file                           |
-| Mutation | `scanReceipt`                   | JWT    | Upload receipt image (JPEG/PNG/WEBP, max 5MB, base64); returns `{ extractedText }`               |
-| Mutation | `approveReceiptExpenses`        | JWT    | Append edited receipt expense text to the user's uploaded expense file                           |
-| Query    | `myAiUsageSummary`              | JWT    | Current-month AI credit limit / used / remaining                                                 |
-| Query    | `myAiUsageLog`                  | JWT    | Paginated AI spend audit (`limit`, `offset`)                                                     |
+| Kind     | Name                            | Auth   | Notes                                                                                                |
+| -------- | ------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| Query    | `health`                        | Public | Health/hello smoke check                                                                             |
+| Query    | `myProfile`                     | JWT    | Auth smoke test                                                                                      |
+| Query    | `myTemplates`                   | JWT    | List current user templates                                                                          |
+| Query    | `myTemplateSettings`            | JWT    | Active template + source settings                                                                    |
+| Query    | `currentExpenseFile`            | JWT    | Current uploaded file metadata + content                                                             |
+| Query    | `currentMonthExpenses`          | JWT    | Structured category + unassigned breakdown of the uploaded expense file                              |
+| Mutation | `generateTemplate`              | JWT    | Generate template via DeepSeek                                                                       |
+| Mutation | `createTemplate`                | JWT    | Create template                                                                                      |
+| Mutation | `updateTemplate`                | JWT    | Update template                                                                                      |
+| Mutation | `deleteTemplate`                | JWT    | Delete template                                                                                      |
+| Mutation | `setActiveTemplate`             | JWT    | Set active template                                                                                  |
+| Mutation | `updateDataSource`              | JWT    | Switch/update source config                                                                          |
+| Mutation | `uploadExpenseFile`             | JWT    | Upload `.txt/.csv` (max 5MB, base64), set source to `FILE_UPLOAD`                                    |
+| Mutation | `overwriteCurrentExpenseFile`   | JWT    | Overwrite currently configured uploaded file (base64)                                                |
+| Mutation | `saveCurrentMonthExpenses`      | JWT    | Serialize categorized + unassigned items and overwrite the uploaded expense file                     |
+| Mutation | `suggestExpenseCategories`      | JWT    | AI-suggest categories for unassigned expense lines (uses AI credits; does not auto-save)             |
+| Mutation | `sendTestEmail`                 | JWT    | Render active template with sample values and send via Brevo                                         |
+| Query    | `mySummarySchedule`             | JWT    | Read automatic summary schedule settings                                                             |
+| Mutation | `updateSummarySchedule`         | JWT    | Update schedule and recalculate `next_summary_at`                                                    |
+| Mutation | `updateSalary`                  | JWT    | Persist current profile salary (`User.salary_cents`) from a money string                             |
+| Mutation | `sendSummaryNow`                | JWT    | Analyze the current expense file and email a real summary without changing schedule                  |
+| Query    | `mySummaries`                   | JWT    | List persisted monthly analytics for ended months (`period < current YYYY-MM`)                       |
+| Query    | `mySummary(month)`              | JWT    | Single-month analytics (`null` if current/future or missing); months before `2026-01` rejected       |
+| Query    | `summaryCategoryKeys`           | JWT    | Closed English category vocabulary for manual backfill UI                                            |
+| Mutation | `createManualSummary`           | JWT    | Create historical analytics (`source = MANUAL`) for any ended month (`period < current YYYY-MM`)     |
+| Mutation | `updateManualSummary`           | JWT    | Update an existing analytics row for an ended month (scheduled or manual)                            |
+| Query    | `myMonthlyBudget`               | JWT    | Current reusable monthly category budget (`null` if never saved); may include optional extra expense |
+| Mutation | `saveMonthlyBudget`             | JWT    | Upsert the user's monthly category budget template (and optional extra expense) until overwritten    |
+| Query    | `mySavingsGoals`                | JWT    | Long-term savings events with sub-goals, contributions, and derived progress                         |
+| Mutation | `createSavingsGoalEvent`        | JWT    | Create a named long-term savings event                                                               |
+| Mutation | `updateSavingsGoalEvent`        | JWT    | Update an owned event name, currency, or target date                                                 |
+| Mutation | `deleteSavingsGoalEvent`        | JWT    | Delete an owned event (cascades items and contributions)                                             |
+| Mutation | `createSavingsGoalItem`         | JWT    | Add a sub-goal to an owned event; returns the parent event                                           |
+| Mutation | `updateSavingsGoalItem`         | JWT    | Update an owned sub-goal; returns the parent event                                                   |
+| Mutation | `deleteSavingsGoalItem`         | JWT    | Delete an owned sub-goal; returns the parent event                                                   |
+| Mutation | `addSavingsGoalContribution`    | JWT    | Append a dated deposit to an owned sub-goal; returns the parent event                                |
+| Mutation | `deleteSavingsGoalContribution` | JWT    | Delete an owned contribution; returns the parent event                                               |
+| Query    | `monthClosureStatus`            | JWT    | Whether previous period needs closure, leftover cents, and related status fields                     |
+| Mutation | `closeMonth`                    | JWT    | Allocate 100% of leftover to sub-goals; side effects in one transaction (see month-close flow)       |
+| Mutation | `deleteMyAccount`               | JWT    | Delete Supabase Auth identity, profile data, and uploaded expense file                               |
+| Mutation | `scanReceipt`                   | JWT    | Upload receipt image (JPEG/PNG/WEBP, max 5MB, base64); returns `{ extractedText }`                   |
+| Mutation | `approveReceiptExpenses`        | JWT    | Append edited receipt expense text to the user's uploaded expense file                               |
+| Query    | `myAiUsageSummary`              | JWT    | Current-month AI credit limit / used / remaining                                                     |
+| Query    | `myAiUsageLog`                  | JWT    | Paginated AI spend audit (`limit`, `offset`)                                                         |
 
 File upload mutations accept `ExpenseFileUploadInput` / `ScanReceiptInput` with `fileName`, `mimeType`, and `contentBase64` fields.
+
+## Month-close flow
+
+Product rules: [month-close.md](../../expenses-tracking-docs/features/month-close.md).
+
+When a new calendar month starts in `User.summary_timezone` and leftover cash from the previous period is **positive** (`salary_cents − total expense-file amount`), the user must close that month before writing new expenses.
+
+`monthClosureStatus` exposes `needsClosure` and leftover. `needsClosure` is true only when leftover **> 0** and no `MonthClose` row exists for the previous period. Zero or negative leftover does not block the new month.
+
+`closeMonth` runs in one transaction:
+
+1. Validate allocations sum exactly to leftover (positive integer cents; sub-goals owned by the user and same currency as `User.summary_currency`).
+2. Create `SavingsGoalContribution` rows (`note = Domknięcie {period}`).
+3. Insert `SummaryAnalytics` for the previous period if missing (`source = MANUAL`, unassigned lines fold into Other, **no AI**).
+4. Clear the expense file via DataSources.
+5. Insert `MonthClose`.
+
+While `needsClosure` is true, these writes are blocked: `saveCurrentMonthExpenses`, upload/overwrite expense file, `approveReceiptExpenses`. Reads and ended-month analytics stay available; salary can still be edited. Month close does not send email and does not use AI credits.
+
+Dev/test: backend `TEST_NOW_ISO` (ignored in production) and frontend `X-Test-Now` / `?testNow=ISO` (Vite dev) simulate a month boundary.
 
 ## Receipt scan + approval flow
 
@@ -253,17 +285,37 @@ Persisted monthly snapshots live in `SummaryAnalytics` (one row per `(user_id, p
 
 **Reads**: `mySummaries` lists ended months only; `mySummary(month)` returns `null` for the current/future month (or missing rows); `summaryCategoryKeys` exposes the vocabulary for the UI.
 
+### Investments as a savings bucket
+
+Product decision: [ADR 0002](../../expenses-tracking-docs/decisions/0002-investments-as-savings-bucket.md); chart semantics: [monthly-summaries.md](../../expenses-tracking-docs/features/monthly-summaries.md).
+
+Outflow in the canonical `Investments` category is savings-like (`SAVINGS_LIKE_CATEGORY_KEYS`), not consumption. Analytics and summary email expose a **three-bucket** split derived from stored categories (no Prisma column / no backfill):
+
+- **Consumption spending** — `totalExpensesCents - investedCents`
+- **Invested** — `Investments` category total (`investedCents`)
+- **Free savings** — leftover cash (`salaryCents - totalExpensesCents`, existing `savingsCents`)
+
+`totalExpensesCents` remains total outflow so history and user email templates stay valid.
+
+## Budget planning (extra expense)
+
+`BudgetModule` stores one reusable monthly category plan per user (`myMonthlyBudget` / `saveMonthlyBudget`). A new calendar month does not reset it.
+
+Optionally, the plan may include **one named extra expense** funded by integer cut percentages on categories with non-zero planned amounts. Charts use post-cut category amounts and an extra-expense slice for money set aside. Saving with `extraExpense: null` clears any stored extra expense. No AI credits.
+
+Product rules: [budget-planning.md](../../expenses-tracking-docs/features/budget-planning.md).
+
 ## AI credits and usage audit
 
-Monthly AI spend is tracked in `AiUsageModule` / `AiUsageService`.
+Monthly AI spend is tracked in `AiUsageModule` / `AiUsageService`. Product: [ai-credits.md](../../expenses-tracking-docs/features/ai-credits.md).
 
 - **Unit**: `1 credit = AI_TOKENS_PER_CREDIT` tokens (default `1000`), rounded up via `Math.ceil`.
 - **Limit**: stored per user on `User.ai_credit_limit` (default from `AI_MONTHLY_CREDIT_LIMIT`, default `50`). Applied when the profile is first created.
 - **Period**: UTC calendar month (`periodStart` inclusive → `periodEnd` exclusive).
-- **Actions audited**: `TEMPLATE_GENERATION`, `EXPENSE_SUMMARY`, `RECEIPT_SCAN`.
+- **Actions audited**: `TEMPLATE_GENERATION`, `EXPENSE_SUMMARY`, `RECEIPT_SCAN`, and Suggest categories (`suggestExpenseCategories`).
 - **Triggers**: `MANUAL` (user-initiated GraphQL) or `SCHEDULED` (cron summary batch).
 - **Enforcement**:
-  - Manual AI calls (`generateTemplate`, `scanReceipt`, `sendSummaryNow`) throw `BadRequestException` when `used >= limit`.
+  - Manual AI calls (`generateTemplate`, `scanReceipt`, `sendSummaryNow`, `suggestExpenseCategories`) throw `BadRequestException` when `used >= limit`.
   - Cron batch pre-checks `hasRemainingCredits`; over-limit users are `skipped` with reason `AI credit limit reached` (no DeepSeek call).
 - **Recording**: every DeepSeek completion records `prompt_tokens`, `completion_tokens`, `total_tokens`, computed `credits_used`, success flag, and optional `error_message` — even when downstream content validation fails (tokens were still spent).
 - **API**: `myAiUsageSummary`, `myAiUsageLog(limit, offset)`.
@@ -276,18 +328,21 @@ Monthly AI spend is tracked in `AiUsageModule` / `AiUsageService`.
 2. Uses `template-renderer.ts` to inject sample values.
 3. Calls `EmailService.sendEmail(...)` to Brevo `/smtp/email`.
 
+Scheduled summaries and `sendSummaryNow` also render the active template and send via the same `EmailService` / Brevo path (see [cron-summaries.md](./cron-summaries.md)).
+
 ## Error handling and resiliency
 
 - Service layer throws typed Nest exceptions for domain errors.
 - Provider misconfiguration returns `ServiceUnavailableException`.
 - Upload/download storage failures bubble with context-rich messages.
 - Cron fault-tolerance behavior is implemented in `SummaryService.processDueSummaries()` — per-user try/catch with `SummaryLog` persistence.
+- Month-close write guard returns domain errors when `needsClosure` blocks expense-file mutations.
 
 See [cron-summaries.md](./cron-summaries.md) for scheduler and webhook details.
 
 ## Security notes
 
-- Secrets remain server-side (`DEEPSEEK_API_KEY`, `BREVO_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, Nextcloud credentials).
+- Secrets remain server-side (`DEEPSEEK_API_KEY`, `BREVO_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, Nextcloud credentials, `CRON_SECRET`).
 - Non-secret AI quota knobs (`AI_TOKENS_PER_CREDIT`, `AI_MONTHLY_CREDIT_LIMIT`) are env vars / GitHub environment variables.
 - Frontend only uses Supabase user access token; service role key is never exposed.
 - Prisma adapter strips SSL params from URL and applies explicit TLS option via `DATABASE_SSL_REJECT_UNAUTHORIZED`.

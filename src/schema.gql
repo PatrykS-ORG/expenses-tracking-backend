@@ -45,6 +45,12 @@ input ApproveReceiptExpensesInput {
   text: String!
 }
 
+input CloseMonthInput {
+  allocations: [MonthCloseAllocationInput!]!
+  period: String!
+  testNow: String
+}
+
 input CreateManualSummaryInput {
   categories: [ManualSummaryCategoryInput!]!
   period: String!
@@ -165,6 +171,21 @@ input ManualSummaryCategoryItemInput {
   name: String!
 }
 
+input MonthCloseAllocationInput {
+  amountCents: Int!
+  itemId: String!
+}
+
+type MonthClosureStatus {
+  currency: String!
+  currentPeriod: String!
+  freeSavingsCents: Int!
+  needsClosure: Boolean!
+  period: String!
+  salaryCents: Int!
+  totalExpensesCents: Int!
+}
+
 type MonthlyBudget {
   categories: [MonthlyBudgetCategory!]!
   currency: String!
@@ -186,6 +207,7 @@ input MonthlyBudgetCategoryInput {
 type Mutation {
   addSavingsGoalContribution(input: AddSavingsGoalContributionInput!, itemId: String!): SavingsGoalEvent!
   approveReceiptExpenses(input: ApproveReceiptExpensesInput!): Boolean!
+  closeMonth(input: CloseMonthInput!): MonthClosureStatus!
   createManualSummary(input: CreateManualSummaryInput!): SummaryAnalyticsModel!
   createSavingsGoalEvent(input: CreateSavingsGoalEventInput!): SavingsGoalEvent!
   createSavingsGoalItem(eventId: String!, input: CreateSavingsGoalItemInput!): SavingsGoalEvent!
@@ -229,6 +251,7 @@ type Query {
   currentExpenseFile: CurrentExpenseFile!
   currentMonthExpenses: CurrentMonthExpenses!
   health: String!
+  monthClosureStatus(testNow: String): MonthClosureStatus!
   myAiUsageLog(limit: Int, offset: Int): [AiUsageLogEntry!]!
   myAiUsageSummary: AiUsageSummary!
   myMonthlyBudget: MonthlyBudget

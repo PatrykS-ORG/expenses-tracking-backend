@@ -24,7 +24,7 @@ describe('DataSourcesService current-month expenses', () => {
     storageService as never,
     templatesService as never,
     aiService as never,
-    monthCloseService,
+    monthCloseService as never,
   );
 
   beforeEach(() => {

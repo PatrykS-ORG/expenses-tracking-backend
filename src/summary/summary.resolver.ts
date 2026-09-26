@@ -90,9 +90,11 @@ export class SummaryResolver {
   @Query(() => [SummaryAnalyticsModel])
   async mySummaries(
     @CurrentUserGql() user: AuthenticatedUser,
+    @Args('year', { type: () => Int }) year: number,
   ): Promise<SummaryAnalyticsModel[]> {
     const rows = await this.summaryService.getMySummaries(
       extractUserId(user),
+      year,
       user.email,
     );
     return rows.map(toSummaryAnalyticsModel);

@@ -20,13 +20,18 @@ import {
   clampScheduleDay,
   clampScheduleHour,
   computeNextSummaryAt,
+  CALENDAR_YEAR_ERRORS,
   getCurrentCalendarPeriod,
   getSummaryPeriod,
+  isCalendarYearInRange,
   isCreatableSummaryPeriod,
   isEndedSummaryPeriod,
   isOnOrAfterEarliestSummaryPeriod,
+  isOnOrBeforeLatestSummaryPeriod,
   isValidSummaryPeriod,
+  manualSummaryYearBlock,
   normalizeTimezone,
+  yearPeriodBounds,
 } from './summary-schedule.util';
 import {
   fromSummaryEmailLanguageEnum,
@@ -278,16 +283,26 @@ export class SummaryService {
 
   async getMySummaries(
     userId: string,
+    year: number,
     userEmail?: string,
   ): Promise<SummaryAnalyticsRecord[]> {
+    if (!isCalendarYearInRange(year)) {
+      throw new BadRequestException(CALENDAR_YEAR_ERRORS.YEAR_OUT_OF_RANGE);
+    }
+
     await this.userProfileService.ensureUserProfile(userId, userEmail);
     const timezone = await this.getUserTimezone(userId);
     const currentPeriod = getCurrentCalendarPeriod(timezone);
+    const bounds = yearPeriodBounds(year);
 
     const rows = await this.prisma.summaryAnalytics.findMany({
       where: {
         user_id: userId,
-        period: { lt: currentPeriod },
+        AND: [
+          { period: { gte: bounds.from } },
+          { period: { lte: bounds.to } },
+          { period: { lt: currentPeriod } },
+        ],
       },
       orderBy: { period: 'desc' },
     });
@@ -309,8 +324,12 @@ export class SummaryService {
 
     if (!isOnOrAfterEarliestSummaryPeriod(normalizedPeriod)) {
       throw new BadRequestException(
-        'Summary periods before 2026-01 are not accepted',
+        'Summary periods before 2025-01 are not accepted',
       );
+    }
+
+    if (!isOnOrBeforeLatestSummaryPeriod(normalizedPeriod)) {
+      throw new BadRequestException(CALENDAR_YEAR_ERRORS.YEAR_OUT_OF_RANGE);
     }
 
     const timezone = await this.getUserTimezone(userId);
@@ -348,11 +367,20 @@ export class SummaryService {
 
     if (!isOnOrAfterEarliestSummaryPeriod(period)) {
       throw new BadRequestException(
-        'Summary periods before 2026-01 are not accepted',
+        'Summary periods before 2025-01 are not accepted',
       );
     }
 
+    if (!isOnOrBeforeLatestSummaryPeriod(period)) {
+      throw new BadRequestException(CALENDAR_YEAR_ERRORS.YEAR_OUT_OF_RANGE);
+    }
+
     const timezone = await this.getUserTimezone(userId);
+    const yearBlock = manualSummaryYearBlock(period, timezone);
+    if (yearBlock) {
+      throw new BadRequestException(yearBlock);
+    }
+
     if (!isCreatableSummaryPeriod(period, timezone)) {
       throw new BadRequestException(
         'Manual summaries can only be created for ended calendar months',
@@ -411,11 +439,20 @@ export class SummaryService {
 
     if (!isOnOrAfterEarliestSummaryPeriod(period)) {
       throw new BadRequestException(
-        'Summary periods before 2026-01 are not accepted',
+        'Summary periods before 2025-01 are not accepted',
       );
     }
 
+    if (!isOnOrBeforeLatestSummaryPeriod(period)) {
+      throw new BadRequestException(CALENDAR_YEAR_ERRORS.YEAR_OUT_OF_RANGE);
+    }
+
     const timezone = await this.getUserTimezone(userId);
+    const yearBlock = manualSummaryYearBlock(period, timezone);
+    if (yearBlock) {
+      throw new BadRequestException(yearBlock);
+    }
+
     if (!isEndedSummaryPeriod(period, timezone)) {
       throw new BadRequestException(
         'Only ended calendar months can be updated',

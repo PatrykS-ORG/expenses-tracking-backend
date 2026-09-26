@@ -361,4 +361,91 @@ describe('SummaryService analytics', () => {
       }),
     ).rejects.toThrow(NotFoundException);
   });
+
+  it('returns summaries only for the requested calendar year', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      summary_timezone: 'Europe/Warsaw',
+    });
+    prismaMock.summaryAnalytics.findMany.mockResolvedValue([]);
+
+    await service.getMySummaries('user-1', 2026, 'user@example.com');
+
+    expect(prismaMock.summaryAnalytics.findMany).toHaveBeenCalledWith({
+      where: {
+        user_id: 'user-1',
+        AND: [
+          { period: { gte: '2026-01' } },
+          { period: { lte: '2026-12' } },
+          { period: { lt: '2026-04' } },
+        ],
+      },
+      orderBy: { period: 'desc' },
+    });
+  });
+
+  it('rejects summary years outside 2025-2056', async () => {
+    await expect(
+      service.getMySummaries('user-1', 2057, 'user@example.com'),
+    ).rejects.toThrow('YEAR_OUT_OF_RANGE');
+    await expect(
+      service.getMySummaries('user-1', 2024, 'user@example.com'),
+    ).rejects.toThrow('YEAR_OUT_OF_RANGE');
+  });
+
+  it('rejects manual summary writes for a past calendar year', async () => {
+    jest.setSystemTime(new Date('2027-02-02T10:00:00.000Z'));
+    prismaMock.user.findUnique.mockResolvedValue({
+      summary_timezone: 'Europe/Warsaw',
+      summary_currency: 'PLN',
+    });
+
+    await expect(
+      service.createManualSummary('user-1', 'user@example.com', {
+        period: '2026-12',
+        salaryAmount: '5000',
+        categories: [{ name: 'Groceries', total: '1000' }],
+      }),
+    ).rejects.toThrow('PAST_YEAR_READ_ONLY');
+
+    await expect(
+      service.updateManualSummary('user-1', 'user@example.com', {
+        period: '2026-12',
+        salaryAmount: '5000',
+        categories: [{ name: 'Groceries', total: '1000' }],
+      }),
+    ).rejects.toThrow('PAST_YEAR_READ_ONLY');
+    expect(prismaMock.summaryAnalytics.create).not.toHaveBeenCalled();
+    expect(prismaMock.summaryAnalytics.update).not.toHaveBeenCalled();
+  });
+
+  it('still allows a manual summary for an ended month in the current year', async () => {
+    jest.setSystemTime(new Date('2027-02-02T10:00:00.000Z'));
+    prismaMock.user.findUnique.mockResolvedValue({
+      summary_timezone: 'Europe/Warsaw',
+      summary_currency: 'PLN',
+    });
+    prismaMock.summaryAnalytics.findUnique.mockResolvedValue(null);
+    prismaMock.summaryAnalytics.create.mockResolvedValue({
+      id: 'analytics-1',
+      user_id: 'user-1',
+      period: '2027-01',
+      source: SummaryAnalyticsSource.MANUAL,
+      currency: 'PLN',
+      salary_cents: 500_000,
+      total_expenses_cents: 100_000,
+      savings_cents: 400_000,
+      savings_message: null,
+      categories: [],
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    await service.createManualSummary('user-1', 'user@example.com', {
+      period: '2027-01',
+      salaryAmount: '5000',
+      categories: [{ name: 'Groceries', total: '1000' }],
+    });
+
+    expect(prismaMock.summaryAnalytics.create).toHaveBeenCalled();
+  });
 });

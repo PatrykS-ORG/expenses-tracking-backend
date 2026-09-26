@@ -188,7 +188,7 @@ All client-facing operations are exposed through GraphQL at `/graphql`.
 | Mutation | `updateSalary`                  | JWT    | Persist current profile salary (`User.salary_cents`) from a money string                             |
 | Mutation | `sendSummaryNow`                | JWT    | Analyze the current expense file and email a real summary without changing schedule                  |
 | Query    | `mySummaries`                   | JWT    | List persisted monthly analytics for ended months (`period < current YYYY-MM`)                       |
-| Query    | `mySummary(month)`              | JWT    | Single-month analytics (`null` if current/future or missing); months before `2026-01` rejected       |
+| Query    | `mySummary(month)`              | JWT    | Single-month analytics (`null` if current/future or missing); months before `2025-01` rejected       |
 | Query    | `summaryCategoryKeys`           | JWT    | Closed English category vocabulary for manual backfill UI                                            |
 | Mutation | `createManualSummary`           | JWT    | Create historical analytics (`source = MANUAL`) for any ended month (`period < current YYYY-MM`)     |
 | Mutation | `updateManualSummary`           | JWT    | Update an existing analytics row for an ended month (scheduled or manual)                            |
@@ -278,12 +278,12 @@ Persisted monthly snapshots live in `SummaryAnalytics` (one row per `(user_id, p
 
 **Manual backfill** (`createManualSummary` / `updateManualSummary`):
 
-1. Validates `period` as `YYYY-MM`, rejects months before `2026-01`.
-2. Create and update/view require an ended month (`period < current YYYY-MM` in the user's timezone). Once the new month has started, the previous month can be created manually. Cron never overwrites an existing analytics row for that period.
+1. Validates `period` as `YYYY-MM`, rejects months before `2025-01` and after `2056-12` (`YEAR_OUT_OF_RANGE`).
+2. Create and update require an ended month in the user's **current calendar year**. A past year returns `PAST_YEAR_READ_ONLY`. Current and future months stay rejected by the ended-month rule. Cron never overwrites an existing analytics row for that period.
 3. `parseManualSummaryPayload()` parses salary/category money strings into cents, normalizes category names through the closed vocabulary (+ aliases), and recomputes totals/savings in code.
 4. Create sets `source = MANUAL` and snapshots `User.summary_currency`. Update rewrites amounts/categories/message but does not change `source` or currency.
 
-**Reads**: `mySummaries` lists ended months only; `mySummary(month)` returns `null` for the current/future month (or missing rows); `summaryCategoryKeys` exposes the vocabulary for the UI.
+**Reads**: `mySummaries(year)` lists ended months inside `YYYY-01`…`YYYY-12` for a year from 2025 through 2056; `mySummary(month)` returns `null` for the current/future month (or missing rows); `summaryCategoryKeys` exposes the vocabulary for the UI. Product rules: [calendar-year-context.md](../../expenses-tracking-docs/features/calendar-year-context.md).
 
 ### Investments as a savings bucket
 

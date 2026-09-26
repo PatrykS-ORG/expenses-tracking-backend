@@ -71,6 +71,20 @@ describe('month-close.logic', () => {
     expect(status.needsClosure).toBe(false);
   });
 
+  it('still requires December closure after the year rolls over', () => {
+    expect(
+      evaluateMonthClosure({
+        currentPeriod: '2027-01',
+        previousPeriod: '2026-12',
+        expenseOpenPeriod: '2026-12',
+        alreadyClosed: false,
+        salaryCents: 500_000,
+        totalExpensesCents: 200_000,
+        currency: 'PLN',
+      }).needsClosure,
+    ).toBe(true);
+  });
+
   it('sums allocation cents', () => {
     expect(
       sumAllocationCents([{ amountCents: 10_000 }, { amountCents: 25_000 }]),

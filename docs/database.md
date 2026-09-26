@@ -452,7 +452,7 @@ erDiagram
 - After a successful scheduled summary email, the backend inserts a `SummaryAnalytics` row (`source = SCHEDULED`) only when one does not already exist for that `(user_id, period)`. Existing analytics are never overwritten by cron.
 - `sendSummaryNow` sends email only — it does not write `SummaryAnalytics`.
 - Manual analytics create/update/view require an ended month (`period < current YYYY-MM` in the user's timezone). Once the new month has started, the previous month can be created manually. Update may rewrite either `SCHEDULED` or `MANUAL` rows; it does not change `source` or currency.
-- Accepted analytics periods start at `2026-01` (earlier months are rejected).
+- Accepted analytics periods start at `2025-01` and end at `2056-12`. Calendar year is the `YYYY` prefix of `period`; there is no year column and no per-year expense-file table. `mySummaries(year)` filters that prefix. Manual writes for a year before the user's current calendar year fail with `PAST_YEAR_READ_ONLY`.
 - Category keys in analytics JSON and `MonthlyBudget.categories` must belong to the closed vocabulary listed above.
 - Report currency is restricted by the API to `PLN`, `EUR`, `USD`, `GBP`, `CHF`, `CZK`, or `UAH`; it controls AI output formatting and does not perform exchange-rate conversion.
 - AI spend is capped monthly per user (`User.ai_credit_limit`). Credits = `ceil(total_tokens / AI_TOKENS_PER_CREDIT)`. Manual AI actions fail when the budget is exhausted; cron summaries skip those users.

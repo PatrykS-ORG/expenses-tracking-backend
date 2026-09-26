@@ -171,7 +171,18 @@ export function previousCalendarPeriod(period: string): string {
 const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 /** Earliest YYYY-MM accepted for analytics view / create / update. */
-export const EARLIEST_SUMMARY_PERIOD = '2026-01';
+export const EARLIEST_SUMMARY_PERIOD = '2025-01';
+export const EARLIEST_CALENDAR_YEAR = 2025;
+export const LATEST_CALENDAR_YEAR = 2056;
+export const LATEST_SUMMARY_PERIOD = '2056-12';
+
+export const CALENDAR_YEAR_ERRORS = {
+  PAST_YEAR_READ_ONLY: 'PAST_YEAR_READ_ONLY',
+  YEAR_OUT_OF_RANGE: 'YEAR_OUT_OF_RANGE',
+} as const;
+
+export type CalendarYearErrorCode =
+  (typeof CALENDAR_YEAR_ERRORS)[keyof typeof CALENDAR_YEAR_ERRORS];
 
 export function isValidSummaryPeriod(period: string): boolean {
   return PERIOD_PATTERN.test(period.trim());
@@ -183,6 +194,54 @@ export function compareSummaryPeriods(left: string, right: string): number {
 
 export function isOnOrAfterEarliestSummaryPeriod(period: string): boolean {
   return compareSummaryPeriods(period, EARLIEST_SUMMARY_PERIOD) >= 0;
+}
+
+export function isOnOrBeforeLatestSummaryPeriod(period: string): boolean {
+  return compareSummaryPeriods(period, LATEST_SUMMARY_PERIOD) <= 0;
+}
+
+export function extractYearFromPeriod(period: string): number | null {
+  if (!isValidSummaryPeriod(period)) return null;
+  return Number(period.trim().slice(0, 4));
+}
+
+export function isCalendarYearInRange(year: number): boolean {
+  return (
+    Number.isInteger(year) &&
+    year >= EARLIEST_CALENDAR_YEAR &&
+    year <= LATEST_CALENDAR_YEAR
+  );
+}
+
+export function yearPeriodBounds(year: number): { from: string; to: string } {
+  const padded = String(year).padStart(4, '0');
+  return { from: `${padded}-01`, to: `${padded}-12` };
+}
+
+export function getCurrentCalendarYear(
+  timezone: string,
+  at: Date = new Date(),
+): number {
+  return getZonedDateParts(at, timezone).year;
+}
+
+/**
+ * Past calendar years are archived. Years outside 2025–2056 are rejected.
+ * Current and future months stay under the ended-month rules.
+ */
+export function manualSummaryYearBlock(
+  period: string,
+  timezone: string,
+  at: Date = new Date(),
+): CalendarYearErrorCode | null {
+  const year = extractYearFromPeriod(period);
+  if (year == null || !isCalendarYearInRange(year)) {
+    return CALENDAR_YEAR_ERRORS.YEAR_OUT_OF_RANGE;
+  }
+  if (year < getCurrentCalendarYear(timezone, at)) {
+    return CALENDAR_YEAR_ERRORS.PAST_YEAR_READ_ONLY;
+  }
+  return null;
 }
 
 export function isEndedSummaryPeriod(
@@ -197,9 +256,9 @@ export function isEndedSummaryPeriod(
 }
 
 /**
- * Manual create is allowed for any ended calendar month in the user's timezone
- * (including the previous month once the new month has started). Cron never
- * overwrites an existing SummaryAnalytics row for the same period.
+ * Manual create is allowed for an ended month in the user's current calendar
+ * year. Past years are read-only, and cron never overwrites an existing
+ * SummaryAnalytics row for the same period.
  */
 export function isCreatableSummaryPeriod(
   period: string,

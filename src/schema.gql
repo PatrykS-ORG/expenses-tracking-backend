@@ -257,7 +257,7 @@ type Query {
   myMonthlyBudget: MonthlyBudget
   myProfile: Profile!
   mySavingsGoals: [SavingsGoalEvent!]!
-  mySummaries: [SummaryAnalyticsModel!]!
+  mySummaries(year: Int!): [SummaryAnalyticsModel!]!
   mySummary(month: String!): SummaryAnalyticsModel
   mySummarySchedule: SummarySchedule!
   myTemplateSettings: TemplateSettings!

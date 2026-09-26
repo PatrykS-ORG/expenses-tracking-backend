@@ -58,6 +58,24 @@ describe('MonthCloseService', () => {
     service = module.get(MonthCloseService);
   });
 
+  it('still requires December closure after the calendar year rolls over', async () => {
+    clockMock.now.mockReturnValue(new Date('2027-01-02T08:00:00.000Z'));
+    prismaMock.user.findUnique.mockResolvedValue({
+      salary_cents: 500_000,
+      summary_currency: 'PLN',
+      summary_timezone: 'Europe/Warsaw',
+      expense_open_period: '2026-12',
+    });
+
+    const status = await service.getStatus('user-1', 'a@b.c');
+
+    expect(status).toMatchObject({
+      needsClosure: true,
+      period: '2026-12',
+      currentPeriod: '2027-01',
+    });
+  });
+
   it('reports needsClosure for a positive leftover in a new month', async () => {
     const status = await service.getStatus('user-1', 'a@b.c');
 

@@ -7,6 +7,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Sections are generated automatically by `.github/workflows/release.yml` on each push to `production`.
 
+## [0.0.25] - 2026-09-26
+
+### Features
+- scope monthly summaries to a calendar year (#56)
+
 ## [0.0.24] - 2026-09-21
 
 ### Bug Fixes
